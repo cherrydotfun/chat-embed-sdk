@@ -1,11 +1,11 @@
-# @aspect-fun/cherry-embed-sdk
+# @cherrydotfun/embed-sdk
 
 Embed Cherry Chat public rooms into any website. Lightweight iframe-based SDK with zero-signature authentication and full theming support.
 
 ## Install
 
 ```bash
-npm install @aspect-fun/cherry-embed-sdk
+npm install @cherrydotfun/embed-sdk
 ```
 
 Or via CDN:
@@ -19,7 +19,7 @@ Or via CDN:
 ### With npm
 
 ```typescript
-import { CherryEmbed } from '@aspect-fun/cherry-embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/embed-sdk';
 
 const chat = new CherryEmbed({
   appId: 'your-app-id',
