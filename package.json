@@ -1,0 +1,45 @@
+{
+  "name": "@aspect-fun/cherry-embed-sdk",
+  "version": "0.1.0",
+  "description": "Embed Cherry Chat public rooms into any website. Zero-signature auth, full theming, lightweight iframe-based.",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "cherry",
+    "chat",
+    "embed",
+    "widget",
+    "iframe",
+    "solana",
+    "web3",
+    "messaging"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nicefun/cherry-embed-sdk"
+  },
+  "homepage": "https://cherry.fun",
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3"
+  }
+}
