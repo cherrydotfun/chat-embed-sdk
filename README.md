@@ -189,6 +189,30 @@ npm start
 # Open http://localhost:8080
 ```
 
+## AI Integration Skills
+
+This package includes skills for Claude Code and Codex that guide you through the integration step by step.
+
+### Setup
+
+```bash
+# Claude Code
+cp -r node_modules/@cherrydotfun/embed-sdk/skills/cherry-embed-integration ~/.claude/skills/
+
+# Codex
+cp -r node_modules/@cherrydotfun/embed-sdk/skills/cherry-embed-integration ~/.agents/skills/
+```
+
+### Usage
+
+In Claude Code or Codex:
+
+> "Add Cherry Chat embed to this project"
+
+The skill analyzes your project, creates the backend token endpoint, mounts the widget, and configures theming — all guided step by step.
+
+See [`skills/README.md`](./skills/README.md) for details.
+
 ## License
 
 MIT

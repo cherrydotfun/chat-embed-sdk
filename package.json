@@ -15,7 +15,10 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "skills",
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",
