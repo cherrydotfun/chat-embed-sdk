@@ -400,6 +400,151 @@
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+    /* ---- Theme builder ---- */
+    .theme-group { display: flex; flex-direction: column; gap: 10px; }
+    .theme-group + .theme-group { padding-top: 10px; border-top: 1px solid var(--border); }
+
+    .theme-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .preset-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .preset-btn {
+      padding: 7px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .preset-btn:hover { border-color: var(--primary); }
+    .preset-btn.active { border-color: var(--primary); background: rgba(176,84,247,0.08); }
+    .preset-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .color-row {
+      display: grid;
+      grid-template-columns: 100px 32px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .color-row label { font-size: 12px; color: var(--text-muted); }
+    .color-swatch-input {
+      width: 32px;
+      height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+      background: transparent;
+    }
+    .color-text-input {
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 5px 8px;
+      outline: none;
+    }
+    .color-text-input:focus { border-color: var(--primary); }
+
+    .pill-row {
+      display: flex;
+      gap: 4px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px;
+    }
+    .pill-btn {
+      flex: 1;
+      padding: 5px 8px;
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .pill-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .range-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .range-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--primary);
+    }
+    .range-value {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      width: 40px;
+      text-align: right;
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+    }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+    }
+    .check-item input[type="checkbox"] {
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .text-input {
+      width: 100%;
+      font-size: 12px;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      outline: none;
+      font-family: inherit;
+    }
+    .text-input:focus { border-color: var(--primary); }
+
     /* ---- Responsive ---- */
     @media (max-width: 800px) {
       .main {
@@ -554,6 +699,84 @@
               <span class="evt-val waiting" id="evt-error">—</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Step 5: Theme builder -->
+      <div class="card" id="card-theme">
+        <div class="card-header">
+          <div class="card-step">5</div>
+          <div class="card-title">Theme & Layout</div>
+        </div>
+        <div class="card-body">
+
+          <!-- Presets -->
+          <div class="theme-group">
+            <span class="theme-label">Presets</span>
+            <div class="preset-row" id="preset-row"></div>
+          </div>
+
+          <!-- Colors -->
+          <div class="theme-group">
+            <span class="theme-label">Colors</span>
+            <div id="color-pickers"></div>
+          </div>
+
+          <!-- Typography -->
+          <div class="theme-group">
+            <span class="theme-label">Font size</span>
+            <div class="pill-row" id="fontsize-row">
+              <button class="pill-btn" data-size="sm">sm</button>
+              <button class="pill-btn active" data-size="md">md</button>
+              <button class="pill-btn" data-size="lg">lg</button>
+            </div>
+          </div>
+
+          <!-- Border radius -->
+          <div class="theme-group">
+            <span class="theme-label">Border radius: <span id="radius-value">18</span>px</span>
+            <div class="range-row">
+              <input type="range" id="radius-slider" min="0" max="32" value="18" />
+            </div>
+          </div>
+
+          <!-- Avatar shape -->
+          <div class="theme-group">
+            <span class="theme-label">Avatar shape</span>
+            <div class="pill-row" id="avatar-row">
+              <button class="pill-btn active" data-shape="circle">Circle</button>
+              <button class="pill-btn" data-shape="square">Square</button>
+            </div>
+          </div>
+
+          <!-- Layout toggles -->
+          <div class="theme-group">
+            <span class="theme-label">Layout</span>
+            <div class="check-grid">
+              <label class="check-item"><input type="checkbox" id="l-header" checked /> Header</label>
+              <label class="check-item"><input type="checkbox" id="l-members" checked /> Members</label>
+              <label class="check-item"><input type="checkbox" id="l-avatars" checked /> Avatars</label>
+              <label class="check-item"><input type="checkbox" id="l-timestamps" checked /> Timestamps</label>
+              <label class="check-item"><input type="checkbox" id="l-reactions" checked /> Reactions</label>
+              <label class="check-item"><input type="checkbox" id="l-input" checked /> Input</label>
+              <label class="check-item"><input type="checkbox" id="l-compact" /> Compact</label>
+            </div>
+          </div>
+
+          <!-- Header title override -->
+          <div class="theme-group">
+            <span class="theme-label">Header title (optional)</span>
+            <input type="text" class="text-input" id="header-title" placeholder="Leave empty for default" />
+          </div>
+
+          <!-- Apply buttons -->
+          <div class="theme-group">
+            <div class="btn-row">
+              <button class="btn btn-secondary btn-sm" onclick="resetTheme()">Reset</button>
+              <button class="btn btn-secondary btn-sm" onclick="exportTheme()">Copy config</button>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -953,19 +1176,8 @@ async function mountChat() {
       roomId: appConfig.roomId,
       embedUrl: appConfig.embedUrl,
       position: 'inline',
-      theme: {
-        mode: 'dark',
-        primaryColor: '#b054f7',
-        accentColor: '#f54b7c',
-      },
-      layout: {
-        showHeader: true,
-        showMemberCount: true,
-        showAvatars: true,
-        showTimestamps: true,
-        showReactions: true,
-        showInput: true,
-      },
+      theme: { ...currentTheme },
+      layout: { ...currentLayout },
     });
 
     // Wire up all SDK events
@@ -1024,10 +1236,277 @@ function setEvtFired(evtName, label, cls) {
 }
 
 // ============================================================
+//  Theme builder — live customization of the embedded chat
+// ============================================================
+const PRESETS = {
+  'Cherry Dark': {
+    theme: {
+      mode: 'dark',
+      primaryColor: '#ff1493',
+      accentColor: '#c026d3',
+      backgroundColor: '#0a0a0f',
+      surfaceColor: '#12111a',
+      textColor: '#ffffff',
+      textSecondaryColor: 'rgba(255, 255, 255, 0.5)',
+      fontFamily: 'Outfit',
+      fontSize: 'md',
+      borderRadius: '18px',
+      avatarShape: 'circle',
+      compact: false,
+    },
+    layout: { showHeader: true, showMemberCount: true, showAvatars: true, showTimestamps: true, showReactions: true, showInput: true, headerTitle: '' },
+  },
+  'Cherry Light': {
+    theme: {
+      mode: 'light',
+      primaryColor: '#ec4899',
+      accentColor: '#a855f7',
+      backgroundColor: '#fafafa',
+      surfaceColor: '#ffffff',
+      textColor: '#0a0a0f',
+      textSecondaryColor: '#6b7280',
+      fontFamily: 'Outfit',
+      fontSize: 'md',
+      borderRadius: '18px',
+      avatarShape: 'circle',
+      compact: false,
+    },
+    layout: { showHeader: true, showMemberCount: true, showAvatars: true, showTimestamps: true, showReactions: true, showInput: true, headerTitle: '' },
+  },
+  'Midnight': {
+    theme: {
+      mode: 'dark',
+      primaryColor: '#06b6d4',
+      accentColor: '#22d3ee',
+      backgroundColor: '#030712',
+      surfaceColor: '#0c1525',
+      textColor: '#e0f2fe',
+      textSecondaryColor: 'rgba(224, 242, 254, 0.5)',
+      fontFamily: 'Inter',
+      fontSize: 'md',
+      borderRadius: '12px',
+      avatarShape: 'square',
+      compact: false,
+    },
+    layout: { showHeader: true, showMemberCount: true, showAvatars: true, showTimestamps: true, showReactions: true, showInput: true, headerTitle: '' },
+  },
+  'Minimal': {
+    theme: {
+      mode: 'dark',
+      primaryColor: '#9ca3af',
+      accentColor: '#d1d5db',
+      backgroundColor: '#18181b',
+      surfaceColor: '#27272a',
+      textColor: '#e4e4e7',
+      textSecondaryColor: 'rgba(228, 228, 231, 0.5)',
+      fontFamily: 'Inter',
+      fontSize: 'sm',
+      borderRadius: '6px',
+      avatarShape: 'square',
+      compact: true,
+    },
+    layout: { showHeader: true, showMemberCount: false, showAvatars: true, showTimestamps: true, showReactions: false, showInput: true, headerTitle: '' },
+  },
+};
+
+const COLOR_FIELDS = [
+  { key: 'primaryColor',        label: 'Primary' },
+  { key: 'accentColor',         label: 'Accent' },
+  { key: 'backgroundColor',     label: 'Background' },
+  { key: 'surfaceColor',        label: 'Surface' },
+  { key: 'textColor',           label: 'Text' },
+  { key: 'textSecondaryColor',  label: 'Text dim' },
+];
+
+let currentTheme = { ...PRESETS['Cherry Dark'].theme };
+let currentLayout = { ...PRESETS['Cherry Dark'].layout };
+
+function buildPresetRow() {
+  const row = document.getElementById('preset-row');
+  row.innerHTML = '';
+  Object.entries(PRESETS).forEach(([name, { theme }]) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.dataset.preset = name;
+    btn.innerHTML = `
+      <span class="preset-swatch" style="background:${theme.primaryColor}"></span>
+      <span>${name}</span>
+    `;
+    btn.onclick = () => applyPreset(name);
+    row.appendChild(btn);
+  });
+  // Highlight default
+  row.querySelector('[data-preset="Cherry Dark"]')?.classList.add('active');
+}
+
+function buildColorPickers() {
+  const wrap = document.getElementById('color-pickers');
+  wrap.innerHTML = '';
+  COLOR_FIELDS.forEach(({ key, label }) => {
+    const row = document.createElement('div');
+    row.className = 'color-row';
+    // For rgba values, strip to hex for the color input (color input only accepts hex)
+    const rawValue = currentTheme[key] ?? '#000000';
+    const hexValue = rgbaToHex(rawValue);
+    row.innerHTML = `
+      <label>${label}</label>
+      <input type="color" class="color-swatch-input" data-key="${key}" value="${hexValue}" />
+      <input type="text" class="color-text-input" data-key="${key}" value="${rawValue}" />
+    `;
+    const swatch = row.querySelector('.color-swatch-input');
+    const text = row.querySelector('.color-text-input');
+    swatch.addEventListener('input', (e) => {
+      text.value = e.target.value;
+      updateColor(key, e.target.value);
+    });
+    text.addEventListener('change', (e) => {
+      const v = e.target.value.trim();
+      if (v) {
+        swatch.value = rgbaToHex(v);
+        updateColor(key, v);
+      }
+    });
+    wrap.appendChild(row);
+  });
+}
+
+function rgbaToHex(value) {
+  if (!value) return '#000000';
+  if (value.startsWith('#')) return value.slice(0, 7);
+  // Parse rgba/rgb and convert to hex (drops alpha)
+  const m = value.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (m) {
+    const [, r, g, b] = m;
+    return '#' + [r, g, b].map(x => Number(x).toString(16).padStart(2, '0')).join('');
+  }
+  return '#000000';
+}
+
+function updateColor(key, value) {
+  currentTheme[key] = value;
+  applyToChat();
+}
+
+function applyPreset(name) {
+  const preset = PRESETS[name];
+  if (!preset) return;
+  currentTheme = { ...preset.theme };
+  currentLayout = { ...preset.layout };
+
+  // Re-render all controls with preset values
+  document.querySelectorAll('#preset-row .preset-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.preset === name);
+  });
+  buildColorPickers();
+  document.querySelectorAll('#fontsize-row .pill-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.size === currentTheme.fontSize);
+  });
+  document.querySelectorAll('#avatar-row .pill-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.shape === currentTheme.avatarShape);
+  });
+  document.getElementById('radius-slider').value = parseInt(currentTheme.borderRadius, 10) || 18;
+  document.getElementById('radius-value').textContent = parseInt(currentTheme.borderRadius, 10) || 18;
+
+  document.getElementById('l-header').checked      = currentLayout.showHeader       !== false;
+  document.getElementById('l-members').checked     = currentLayout.showMemberCount  !== false;
+  document.getElementById('l-avatars').checked     = currentLayout.showAvatars      !== false;
+  document.getElementById('l-timestamps').checked  = currentLayout.showTimestamps   !== false;
+  document.getElementById('l-reactions').checked   = currentLayout.showReactions    !== false;
+  document.getElementById('l-input').checked       = currentLayout.showInput        !== false;
+  document.getElementById('l-compact').checked     = !!currentTheme.compact;
+  document.getElementById('header-title').value    = currentLayout.headerTitle || '';
+
+  applyToChat();
+  log('theme.preset', name);
+}
+
+function applyToChat() {
+  if (!chat) return;
+  try {
+    chat.setTheme({ ...currentTheme });
+    chat.setLayout({ ...currentLayout });
+  } catch (err) {
+    console.warn('Apply theme failed:', err);
+  }
+}
+
+function initThemeControls() {
+  buildPresetRow();
+  buildColorPickers();
+
+  // Font size pills
+  document.querySelectorAll('#fontsize-row .pill-btn').forEach((btn) => {
+    btn.onclick = () => {
+      document.querySelectorAll('#fontsize-row .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTheme.fontSize = btn.dataset.size;
+      applyToChat();
+    };
+  });
+
+  // Avatar shape pills
+  document.querySelectorAll('#avatar-row .pill-btn').forEach((btn) => {
+    btn.onclick = () => {
+      document.querySelectorAll('#avatar-row .pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTheme.avatarShape = btn.dataset.shape;
+      applyToChat();
+    };
+  });
+
+  // Border radius slider
+  const slider = document.getElementById('radius-slider');
+  slider.addEventListener('input', (e) => {
+    const v = e.target.value;
+    document.getElementById('radius-value').textContent = v;
+    currentTheme.borderRadius = v + 'px';
+    applyToChat();
+  });
+
+  // Layout checkboxes
+  const bindCheck = (id, apply) => {
+    document.getElementById(id).addEventListener('change', (e) => {
+      apply(e.target.checked);
+      applyToChat();
+    });
+  };
+  bindCheck('l-header',     v => currentLayout.showHeader      = v);
+  bindCheck('l-members',    v => currentLayout.showMemberCount = v);
+  bindCheck('l-avatars',    v => currentLayout.showAvatars     = v);
+  bindCheck('l-timestamps', v => currentLayout.showTimestamps  = v);
+  bindCheck('l-reactions',  v => currentLayout.showReactions   = v);
+  bindCheck('l-input',      v => currentLayout.showInput       = v);
+  bindCheck('l-compact',    v => currentTheme.compact          = v);
+
+  // Header title input
+  document.getElementById('header-title').addEventListener('input', (e) => {
+    currentLayout.headerTitle = e.target.value.trim();
+    applyToChat();
+  });
+}
+
+function resetTheme() {
+  applyPreset('Cherry Dark');
+}
+
+function exportTheme() {
+  const config = {
+    theme: currentTheme,
+    layout: currentLayout,
+  };
+  const str = JSON.stringify(config, null, 2);
+  navigator.clipboard.writeText(str).then(() => {
+    log('theme.exported', 'copied to clipboard');
+    alert('Theme config copied to clipboard:\n\n' + str);
+  });
+}
+
+// ============================================================
 //  Init
 // ============================================================
 window.addEventListener('DOMContentLoaded', () => {
   loadConfig();
+  initThemeControls();
   log('page.loaded', window.location.href);
 });
 </script>
