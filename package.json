@@ -1,6 +1,6 @@
 {
   "name": "@cherrydotfun/embed-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Embed Cherry Chat public rooms into any website. Zero-signature auth, full theming, lightweight iframe-based.",
   "license": "MIT",
   "sideEffects": false,

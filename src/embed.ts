@@ -46,10 +46,27 @@ export class CherryEmbed {
     // 4. Setup event forwarding before waiting for ready
     this.setupEventForwarding();
 
-    // 5. Wait for ready event with timeout
+    // 5. Re-apply config on EVERY `ready` event, not just the first one.
+    //    The iframe may reload itself (e.g. after the initial embed-token →
+    //    Cherry JWT exchange calls `window.location.reload()`), which wipes
+    //    theme/layout state inside the iframe. Without this, only server-side
+    //    defaults would survive the reload. `auth.token` is idempotent on the
+    //    iframe side (it no-ops if a valid JWT is already stored), unless
+    //    `force: true` is passed — see `setToken()`.
+    this.bridge.onEvent('ready', () => this.sendInitConfigs());
+
+    // 6. Wait for ready event with timeout. `sendInitConfigs()` will already
+    //    have fired via the handler above by the time this resolves.
     await this.waitForReady(30_000);
 
-    // 6. Send initial config
+    // 7. Handle collapsed state
+    if (this.config.collapsed) {
+      this.hide();
+    }
+  }
+
+  private sendInitConfigs(): void {
+    if (!this.bridge) return;
     if (this.config.token) {
       this.bridge.sendCommand('auth.token', { token: this.config.token });
     }
@@ -58,11 +75,6 @@ export class CherryEmbed {
     }
     if (this.config.layout) {
       this.bridge.sendCommand('setLayout', this.config.layout as Record<string, unknown>);
-    }
-
-    // 7. Handle collapsed state
-    if (this.config.collapsed) {
-      this.hide();
     }
   }
 
@@ -90,7 +102,15 @@ export class CherryEmbed {
   }
 
   setToken(token: string): void {
-    this.bridge?.sendCommand('auth.token', { token });
+    // Keep config in sync so future `ready` events (after iframe reload) re-send
+    // the latest token, not the stale one from construction time.
+    (this.config as { token?: string }).token = token;
+    // `force: true` tells the iframe to discard any existing JWT and exchange
+    // this embed token again. Without it, the iframe would skip re-exchange
+    // because a JWT is already in localStorage — which is exactly the behavior
+    // we want for the regular `ready` re-send path, but NOT for explicit
+    // refresh via setToken (which is called in response to `tokenExpired`).
+    this.bridge?.sendCommand('auth.token', { token, force: true });
   }
 
   show(): void {
