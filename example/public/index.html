@@ -1161,6 +1161,50 @@ function copyToken() {
 // ============================================================
 //  Cherry Embed SDK
 // ============================================================
+
+// ---- signChallenge stub ----
+// In a real integration, replace the body with an actual wallet call, e.g.:
+//   const result = await window.phantom.solana.signMessage(message, 'utf8');
+//   return result.signature;
+//
+// This stub uses tweetnacl (if available on window.nacl) for offline testing.
+// Include it via: <script src="https://cdn.jsdelivr.net/npm/tweetnacl/nacl-fast.min.js"></script>
+function makeSignChallengeStub() {
+  // Attempt to use a real connected wallet if available
+  return async function signChallengeStub(message) {
+    log('signChallenge.received', `message bytes: ${message.length}`);
+
+    if (activeProvider) {
+      try {
+        log('signChallenge.signing', `via ${activeWalletName}`);
+        let sigBytes;
+        if (activeWalletName === 'solflare') {
+          sigBytes = await activeProvider.signMessage(message, 'utf8');
+        } else {
+          const result = await activeProvider.signMessage(message, 'utf8');
+          sigBytes = result.signature || result;
+        }
+        log('signChallenge.signed', `signature bytes: ${sigBytes.length}`);
+        return sigBytes instanceof Uint8Array ? sigBytes : new Uint8Array(sigBytes);
+      } catch (err) {
+        log('signChallenge.error', String(err));
+        throw err;
+      }
+    }
+
+    // Fallback: TweetNaCl stub (deterministic test key — never use in production)
+    if (window.nacl) {
+      const STUB_SECRET = new Uint8Array(64); // all-zero key — test only
+      const sig = window.nacl.sign.detached(message, STUB_SECRET);
+      log('signChallenge.stub', `nacl stub signature (${sig.length} bytes) — test only`);
+      return sig;
+    }
+
+    // No wallet and no nacl — reject so the iframe gets an error response
+    throw new Error('signChallenge: no wallet connected and tweetnacl not loaded');
+  };
+}
+
 async function mountChat() {
   if (!appConfig || !embedToken) return;
 
@@ -1176,6 +1220,7 @@ async function mountChat() {
       roomId: appConfig.roomId,
       embedUrl: appConfig.embedUrl,
       position: 'inline',
+      walletAddress: walletAddress || undefined,
       theme: { ...currentTheme },
       layout: { ...currentLayout },
     });
@@ -1215,6 +1260,12 @@ async function mountChat() {
 
     log('chat.mounting', { appId: appConfig.appId, roomId: appConfig.roomId });
     await chat.mount();
+
+    // Register signChallenge handler AFTER mount() (bridge is ready).
+    // The iframe may call this when authMode requires wallet-signature proof.
+    chat.onSignChallenge(makeSignChallengeStub());
+    log('chat.signChallenge', 'handler registered');
+
     log('chat.mounted', null);
     document.getElementById('step4-badge').classList.add('done');
 

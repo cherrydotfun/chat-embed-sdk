@@ -1,4 +1,5 @@
 export { CherryEmbed } from './embed';
+export type { SignChallengeHandler } from './embed';
 export type {
   CherryEmbedConfig,
   EmbedTheme,
@@ -9,4 +10,11 @@ export type {
   BridgeEvent,
   BridgeRequest,
   BridgeResponse,
+  BridgeRequestMethod,
+  SignChallengeParams,
+  SignChallengeResult,
+  SignChallengeRequest,
+  SignChallengeResponse,
 } from './types';
+export { isSignChallengeRequest } from './types';
+export { EmbedBridgeError, base64ToBytes, bytesToBase64 } from './bridge';
