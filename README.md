@@ -23,7 +23,6 @@ Cherry Embed provides three authentication modes to support different hosting sc
 | **`app-trusted`** | Host backend signs JWT | Internal apps, trusted partners | Yes (recommended) | Instant login |
 | **`app-trusted+wallet`** | Host + wallet signature | Public API, semi-trusted | Yes | Wallet confirmation |
 | **`wallet-only`** | Wallet signature only | Self-hosted, minimal backend | No | Wallet confirmation |
-| **`walletless`** | Host token + opaque ID | Non-Web3 apps | Yes | Instant login |
 
 All modes support:
 - Full read/write access to configured rooms
@@ -49,7 +48,7 @@ app.get('/api/embed-token', (req, res) => {
   
   const token = jwt.sign(
     {
-      sub: walletAddress,      // User's Solana wallet (or opaque ID if walletless)
+      sub: walletAddress,      // User's Solana wallet address
       app_id: 'your-app-id',
     },
     process.env.CHERRY_APP_SECRET, // Shared secret with Cherry admin
@@ -206,63 +205,6 @@ async function initChatWalletOnly() {
 
 ---
 
-### 4. Walletless Integration (Non-Web3 Apps)
-
-For apps that don't use Web3/wallets. Host backend generates token with opaque user ID instead of wallet address.
-
-**Backend:**
-
-```typescript
-import jwt from 'jsonwebtoken';
-
-app.get('/api/embed-token-walletless', (req, res) => {
-  // Your own user ID (email hash, UUID, database ID, etc.)
-  const userId = hashEmail(req.user.email); // or req.user.id
-  
-  const token = jwt.sign(
-    {
-      sub: userId,              // NOT a wallet address
-      app_id: 'your-app-id',
-    },
-    process.env.CHERRY_APP_SECRET,
-    {
-      expiresIn: '5m',
-      jwtid: crypto.randomUUID(),
-    }
-  );
-  
-  res.json({ token });
-});
-```
-
-**Frontend:**
-
-```typescript
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
-
-async function initChatWalletless() {
-  const { token } = await fetch('/api/embed-token-walletless').then(r => r.json());
-  
-  const chat = new CherryEmbed({
-    appId: 'your-app-id',
-    container: '#chat',
-    token,
-    // No wallet connection needed
-  });
-  
-  await chat.mount();
-}
-```
-
-**Security Model:**
-- User ID comes from your backend (you prove user's identity)
-- No wallet required; user participates in public groups
-- E2E direct messages NOT supported (no encryption key)
-- Configured per-app in Cherry Admin Panel
-- Useful for SaaS, community forums, internal tools
-
----
-
 ## Wallet Integration
 
 ### Generic Callback Pattern
@@ -330,9 +272,6 @@ To use Cherry Embed, register your app in the Cherry Admin Panel:
      - `app-trusted`: Your backend only
      - `app-trusted+wallet`: Backend + wallet proof
      - `wallet-only`: Wallet proof only
-   - **User Identifier:**
-     - `wallet`: Standard Solana wallet address
-     - `opaque`: Non-wallet user ID (email hash, UUID, etc.)
    - **Allowed Origins** — Domains where iframe is embedded (e.g., `https://myapp.com`)
    - **Allowed Room IDs** — List of room IDs users can access (optional; if empty, all public rooms)
 
@@ -341,7 +280,6 @@ To use Cherry Embed, register your app in the Cherry Admin Panel:
 - **Auth Mode** — Switch between modes (affects available SDK features)
 - **App Secret** — Rotate periodically via "Rotate Secret" button (shows new value once)
 - **Allowed Origins** — Add/remove domains; origin mismatch blocks iframe
-- **User Identifier** — Change from `wallet` to `opaque` (affects token generation)
 - **API Enabled** — Toggle for experimental REST API (admin use)
 
 ---
