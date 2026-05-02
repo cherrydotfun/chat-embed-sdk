@@ -305,9 +305,17 @@
             <span class="label">Source</span>
             <span class="value" style="color:var(--text-muted)">hardcoded (see HTML comment)</span>
           </div>
-          <button class="btn btn-primary" id="btn-open" onclick="openChat()">
-            Open chat
+          <button class="btn btn-primary" id="btn-signin" onclick="signIn()" disabled>
+            Sign in as demo user
           </button>
+          <button class="btn btn-secondary" id="btn-signout" onclick="signOut()" style="display:none">
+            Sign out (test preview)
+          </button>
+          <p style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
+            Until you sign in, the chat is in <strong>preview</strong> mode —
+            you can read public messages but cannot send or react. Clicking
+            send/react inside the iframe also triggers sign-in.
+          </p>
         </div>
       </div>
 
@@ -361,7 +369,7 @@
         <div id="chat-container">
           <div class="placeholder">
             <div class="placeholder-icon">&#128172;</div>
-            <p>Click "Open chat" to load the embedded chat widget</p>
+            <p>Loading chat preview…</p>
           </div>
         </div>
       </div>
@@ -432,7 +440,7 @@ async function loadConfig() {
       statusEl.innerHTML = '<span class="badge badge-ok">Ready</span>';
     } else {
       statusEl.innerHTML = '<span class="badge badge-warn">Missing .env values</span>';
-      document.getElementById('btn-open').disabled = true;
+      // btn-signin stays disabled until preview successfully mounts
     }
 
     log('config.loaded', { configured: appConfig.configured });
@@ -493,68 +501,126 @@ async function fetchEmbedToken(walletAddress) {
 }
 
 // ============================================================
-//  Open chat (the only user action in app-trusted mode)
+//  Mount the chat in preview mode — no token yet.
+//  The iframe will fetch public messages via /api/embed/preview/...
+//  and render them in read-only mode. Send/react buttons are disabled
+//  inside the iframe and emit `walletConnectRequested` on click.
 // ============================================================
-async function openChat() {
-  document.getElementById('btn-open').disabled = true;
+async function mountPreview() {
+  document.getElementById('chat-container').innerHTML = '';
+
+  chat = new CherryEmbedSDK.CherryEmbed({
+    appId: appConfig.appId,
+    container: '#chat-container',
+    // NO token — iframe enters preview mode and shows public messages
+    // until the host calls chat.setToken(...) below.
+    walletAddress: DEMO_WALLET_ADDRESS, // for display inside the widget
+    roomId: appConfig.roomId || undefined,
+    embedUrl: appConfig.embedUrl,
+  });
+
+  // ── Standard SDK events ────────────────────────────────────────────────
+  chat.on('ready', () => {
+    setEvt('ready', 'fired', 'badge-ok');
+    log('sdk.ready');
+  });
+
+  chat.on('authStateChange', (ok) => {
+    setEvt('auth', ok ? 'authenticated' : 'signed-out', ok ? 'badge-ok' : 'badge-neutral');
+    log('sdk.authStateChange', ok);
+    // When sign-in completes, hide the sign-in button
+    if (ok) {
+      const signinBtn = document.getElementById('btn-signin');
+      signinBtn.disabled = true;
+      signinBtn.textContent = 'Signed in';
+      document.getElementById('btn-signout').style.display = '';
+    } else {
+      const signinBtn = document.getElementById('btn-signin');
+      signinBtn.disabled = false;
+      signinBtn.textContent = 'Sign in as demo user';
+      document.getElementById('btn-signout').style.display = 'none';
+    }
+  });
+
+  chat.on('unreadCount', (n) => {
+    setEvt('unread', String(n), 'badge-ok');
+    log('sdk.unreadCount', n);
+  });
+
+  chat.on('tokenExpired', () => {
+    setEvt('expired', 'expired', 'badge-warn');
+    log('sdk.tokenExpired', 'fetching fresh token');
+    // Auto re-sign on expiry
+    signIn().catch((err) => log('autoResign.error', String(err)));
+  });
+
+  chat.on('error', (err) => {
+    setEvt('error', err.code, 'badge-err');
+    log('sdk.error', err);
+  });
+
+  // ── Preview / sign-in coordination ─────────────────────────────────────
+  // Iframe transitioned into preview mode — read-only public messages visible.
+  chat.on('preview', (data) => {
+    log('sdk.preview', data);
+  });
+
+  // User clicked send/react inside the iframe while in preview mode.
+  // In app-trusted that means: trigger sign-in (host backend issues token).
+  chat.on('walletConnectRequested', () => {
+    log('sdk.walletConnectRequested', 'iframe asked host to sign in');
+    signIn().catch((err) => log('signIn.error', String(err)));
+  });
+
+  log('chat.mounting (preview mode)', appConfig.appId);
+  await chat.mount();
+  log('chat.mounted');
+
+  // Now that the bridge is ready, allow the user to sign in.
+  document.getElementById('btn-signin').disabled = false;
+}
+
+// ============================================================
+//  Sign in: host backend issues an embedToken for DEMO_WALLET_ADDRESS,
+//  we hand it to the running iframe via chat.setToken.
+//  The iframe exchanges it for a Cherry JWT and switches from preview
+//  to authenticated mode automatically.
+// ============================================================
+async function signIn() {
+  const btn = document.getElementById('btn-signin');
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Signing in…';
 
   try {
     const embedToken = await fetchEmbedToken(DEMO_WALLET_ADDRESS);
-
-    document.getElementById('chat-container').innerHTML = '';
-
-    chat = new CherryEmbedSDK.CherryEmbed({
-      appId: appConfig.appId,
-      container: '#chat-container',
-      token: embedToken,
-      // walletAddress is optional in app-trusted mode — the Cherry JWT
-      // already contains sub=walletAddress from the embedToken exchange.
-      // Pass it for display purposes inside the chat widget.
-      walletAddress: DEMO_WALLET_ADDRESS,
-      // roomId comes from ROOM_ID in .env. Required by the embed iframe —
-      // without it you get "No room specified".
-      roomId: appConfig.roomId || undefined,
-      embedUrl: appConfig.embedUrl,
-    });
-
-    // NOTE: onSignChallenge is NOT registered here.
-    // In app-trusted mode the Cherry server never sends a signChallenge
-    // request because the appSecret-signed embedToken is sufficient proof.
-
-    chat.on('ready', () => {
-      setEvt('ready', 'fired', 'badge-ok');
-      log('sdk.ready');
-    });
-
-    chat.on('authStateChange', (ok) => {
-      setEvt('auth', ok ? 'authenticated' : 'signed-out', ok ? 'badge-ok' : 'badge-neutral');
-      log('sdk.authStateChange', ok);
-    });
-
-    chat.on('unreadCount', (n) => {
-      setEvt('unread', String(n), 'badge-ok');
-      log('sdk.unreadCount', n);
-    });
-
-    chat.on('tokenExpired', () => {
-      setEvt('expired', 'expired', 'badge-warn');
-      log('sdk.tokenExpired', 'will auto-refresh');
-    });
-
-    chat.on('error', (err) => {
-      setEvt('error', err.code, 'badge-err');
-      log('sdk.error', err);
-    });
-
-    log('chat.mounting', appConfig.appId);
-    await chat.mount();
-    log('chat.mounted');
-
+    chat.setToken(embedToken);
+    log('chat.setToken', 'handed embedToken to iframe');
   } catch (err) {
-    document.getElementById('btn-open').disabled = false;
+    btn.disabled = false;
+    btn.textContent = originalLabel;
     document.getElementById('token-status').innerHTML =
       `<span class="badge badge-err">${esc(err.message)}</span>`;
-    log('chat.error', String(err));
+    log('signIn.error', String(err));
+  }
+}
+
+// ============================================================
+//  Sign out: tell iframe to clear its JWT and reload.
+//  After reload the iframe re-enters preview mode and the user can verify
+//  that send/react are disabled.
+// ============================================================
+function signOut() {
+  log('chat.signOut', 'asking iframe to clear session');
+  chat.signOut();
+  // The iframe will reload itself; UI flips back to preview on authStateChange=false
+  // Pre-emptively reset token-status badge:
+  document.getElementById('token-status').innerHTML =
+    '<span class="badge badge-neutral">Waiting</span>';
+  document.getElementById('token-exp-row').style.display = 'none';
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = null;
   }
 }
 
@@ -566,11 +632,19 @@ function setEvt(id, label, cls) {
 }
 
 // ============================================================
-//  Init
+//  Init — load config, then mount the iframe in preview mode.
+//  The user can read messages immediately; signing in is a single click.
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
-  loadConfig();
+window.addEventListener('DOMContentLoaded', async () => {
   log('page.loaded');
+  await loadConfig();
+  if (appConfig && appConfig.configured) {
+    try {
+      await mountPreview();
+    } catch (err) {
+      log('preview.mountError', String(err));
+    }
+  }
 });
 </script>
 </body>

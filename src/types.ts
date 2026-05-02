@@ -46,6 +46,20 @@ export type EmbedEventMap = {
   authStateChange: boolean;
   tokenExpired: void;
   error: { code: string; message: string };
+  /**
+   * Iframe requests host to initiate sign-in / wallet connect.
+   * Emitted when the user clicks send/react in preview (read-only) mode,
+   * or clicks an explicit "Connect wallet" CTA inside the iframe.
+   * Host should respond by:
+   *   - app-trusted: fetch embedToken from backend, call chat.setToken(token)
+   *   - app-trusted+wallet / wallet-only: trigger wallet.connect, call chat.setWalletAddress(addr)
+   */
+  walletConnectRequested: void;
+  /**
+   * Iframe transitioned into preview-mode (room metadata + read-only messages,
+   * no JWT yet). Useful for host UI to show a "Sign in" prompt nearby.
+   */
+  preview: { visible: boolean; gated: boolean };
 };
 
 // Bridge protocol messages (host <-> iframe)

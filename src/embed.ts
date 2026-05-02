@@ -140,6 +140,21 @@ export class CherryEmbed {
   }
 
   /**
+   * Sign the iframe out — clears its sessionStorage JWT and reloads the
+   * iframe. After reload it boots in preview mode (or shows the wallet CTA
+   * for wallet-only / app-trusted+wallet apps).
+   *
+   * Use this for testing the preview→auth flow without closing the tab, or
+   * for explicit "Sign out" UI in the host.
+   */
+  signOut(): void {
+    // Drop cached token from in-memory config so a future re-mount doesn't
+    // automatically re-authenticate from the stale value.
+    (this.config as { token?: string }).token = undefined;
+    this.bridge?.sendCommand('auth.logout', {});
+  }
+
+  /**
    * Inform the iframe of the currently connected wallet address.
    *
    * This is useful in two cases:
@@ -279,6 +294,8 @@ export class CherryEmbed {
       'authStateChange',
       'tokenExpired',
       'error',
+      'walletConnectRequested',
+      'preview',
     ];
 
     for (const event of events) {
