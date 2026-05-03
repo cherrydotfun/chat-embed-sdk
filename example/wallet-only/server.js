@@ -62,6 +62,11 @@ app.get('/config.json', (req, res) => {
   });
 });
 
+// Serve the embed SDK IIFE bundle from the local build.
+app.get('/cherry-embed.js', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', '..', 'dist', 'index.global.js'));
+});
+
 // Static files — the only "real" job of this server.
 app.use(express.static(path.join(__dirname, 'public')));
 

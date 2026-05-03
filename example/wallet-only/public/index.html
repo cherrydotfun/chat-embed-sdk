@@ -5,15 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cherry Embed — wallet-only example</title>
   <!--
-    wallet-only example: NO backend server required.
+    wallet-only example: minimal Node host serves /cherry-embed.js, mapped
+    to the local SDK build at ../../../dist/index.global.js (see server.js).
 
-    Load the SDK bundle from the CDN or a local build:
-      CDN (production):  https://cdn.cherry.fun/embed/cherry-embed.js
-      Local (dev build): ../../../dist/index.global.js
-
-    Change the src below to match your setup.
+    For production, replace with the CDN bundle:
+      <script src="https://cdn.cherry.fun/embed/cherry-embed.js"></script>
   -->
-  <script src="../../../dist/index.global.js"></script>
+  <script src="/cherry-embed.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
