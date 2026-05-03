@@ -94,7 +94,7 @@ export class CherryEmbed {
       this.bridge.sendCommand('auth.token', { token: this.config.token });
     }
     if (this._walletAddress) {
-      this.bridge.sendCommand('setWalletAddress', { address: this._walletAddress });
+      this.bridge.sendCommand('setWalletAddress', { walletAddress: this._walletAddress });
     }
     if (this.config.theme) {
       this.bridge.sendCommand('setTheme', this.config.theme as Record<string, unknown>);
@@ -170,7 +170,7 @@ export class CherryEmbed {
     this._walletAddress = address;
     // Sync config so sendInitConfigs() re-sends on iframe reload
     (this.config as { walletAddress?: string }).walletAddress = address;
-    this.bridge?.sendCommand('setWalletAddress', { address });
+    this.bridge?.sendCommand('setWalletAddress', { walletAddress: address });
   }
 
   /**
