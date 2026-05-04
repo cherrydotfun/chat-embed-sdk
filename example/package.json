@@ -1,14 +1,17 @@
 {
-  "name": "cherry-embed-example",
+  "name": "cherry-embed-examples",
   "version": "1.0.0",
   "private": true,
+  "description": "Three examples for each Cherry Embed authMode",
   "scripts": {
-    "start": "node server.js"
+    "start:app-trusted": "node app-trusted/server.js",
+    "start:app-trusted+wallet": "node \"app-trusted+wallet/server.js\"",
+    "start:wallet-only": "node wallet-only/server.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2",
-    "tweetnacl": "^1.0.3",
-    "bs58": "^5.0.0"
+    "jsonwebtoken": "^9.0.2"
   }
 }

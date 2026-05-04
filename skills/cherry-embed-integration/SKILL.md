@@ -1,382 +1,244 @@
 ---
 name: cherry-embed-integration
-description: "Use when embedding Cherry Chat into an existing web3 Solana application — adding a public chat room widget with zero-signature authentication, custom theming, and real-time events. Covers backend token generation, frontend SDK setup, and the complete auth flow."
+description: "Use when embedding Cherry Chat into a web app with @cherrydotfun/embed-sdk. Covers the three supported auth modes, backend token generation, wallet challenge signing, theming, events, and verification."
 ---
 
 # Cherry Embed SDK Integration
 
-Integrate `@cherrydotfun/embed-sdk` into a web3 Solana application to embed a public Cherry Chat room. Users who are already logged in with their wallet on your site will be automatically authenticated in the chat — no additional wallet signatures required.
+Use this skill when adding or reviewing a Cherry Chat embed. The SDK embeds public group-room chat only; do not describe it as encrypted DM/E2E messaging.
 
-## When to Use
+## Start With Discovery
 
-- Adding a community chat widget to a Solana dApp
-- Embedding a public Cherry Chat room into an existing website
-- Setting up zero-signature auth flow between your backend and Cherry
-- Customizing an embedded chat's theme to match your app's design
+Inspect the host app before giving code:
+- Framework and package manager: Next.js, Vite, plain HTML, npm/yarn/pnpm/bun.
+- Where the widget should mount and whether it is inline or floating.
+- Existing Solana wallet integration and how the wallet address/signing API is exposed.
+- Whether the host has a backend that can keep a Cherry app secret private.
+- Requested auth mode: `app-trusted`, `app-trusted+wallet`, or `wallet-only`.
 
-## Prerequisites
+Ask only for missing operational values:
+- `appId` and `roomId`.
+- Embed URL if the integration should use a non-default environment.
+- `appSecret` only for backend work in `app-trusted` or `app-trusted+wallet`; never ask for it for frontend code.
 
-- A Cherry Embed App registered in the Cherry Admin Panel (you need `appId` and `appSecret`)
-- A public Cherry Chat room ID to embed
-- Your application has a backend that can sign JWTs (Node.js, Python, etc.)
-- Your application has wallet-based authentication (users connect Phantom/Solflare/Backpack)
-
-If the user doesn't have an appId/appSecret yet, tell them:
-> Register at Cherry Admin Panel → Embed → Register App. You'll get an appId and appSecret (shown once — save it).
-
-## Integration Checklist
-
-### Step 1: Discovery
-
-Examine the project to understand the tech stack, build system, and where the chat widget should be placed.
-
-Check for:
-- Framework (Next.js, Vite, CRA, plain HTML)
-- Package manager (npm, yarn, pnpm, bun)
-- Existing wallet adapter setup (@solana/wallet-adapter-react or direct provider)
-- Backend framework (Express, Fastify, Next.js API routes, etc.)
-- How the user's wallet address is available on the backend (JWT, session, cookie)
-
-ASK THE USER:
-```
-Where should the chat widget appear? (e.g., sidebar, floating button, dedicated page section)
-What is your Cherry App ID and Room ID?
-```
-
-### Step 2: Install the SDK
+## Install
 
 ```bash
-# npm
 npm install @cherrydotfun/embed-sdk
+```
 
-# yarn
+Respect the host package manager:
+
+```bash
 yarn add @cherrydotfun/embed-sdk
-
-# pnpm
 pnpm add @cherrydotfun/embed-sdk
-
-# bun
 bun add @cherrydotfun/embed-sdk
 ```
 
-For plain HTML sites without a build system:
+For plain HTML without bundling, use the published CDN script if the project already uses script tags:
+
 ```html
 <script src="https://cdn.cherry.fun/embed/v1/cherry-embed.min.js"></script>
 ```
 
-### Step 3: Backend — Embed Token Endpoint
+## Auth Modes
 
-Create an API endpoint on YOUR backend that generates a Cherry embed token. This token tells Cherry who the user is without requiring them to sign anything.
+### `app-trusted`
 
-**The endpoint must:**
-1. Verify the user is authenticated (your existing auth)
-2. Get their Solana wallet address
-3. Sign a JWT with your Cherry `appSecret`
-4. Return the token to the frontend
+Use when the host backend already authenticates users and can issue Cherry embed tokens. The frontend does not ask the wallet to sign for Cherry.
 
-**Node.js / Express:**
+Backend token requirements:
+- Sign HS256 JWT with `CHERRY_APP_SECRET`.
+- Include `sub` as a valid Solana public key, not an opaque id, username, or email.
+- Include `app_id` equal to the Cherry app id.
+- Use a short expiry, usually 5 minutes.
+- Include `jti` for replay protection.
 
-```typescript
+```ts
+import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 
-app.get('/api/cherry/embed-token', authMiddleware, (req, res) => {
+app.get('/api/cherry/embed-token', requireAuth, (req, res) => {
   const token = jwt.sign(
     {
-      sub: req.user.walletAddress,   // User's Solana wallet address
+      sub: req.user.walletAddress,
       app_id: process.env.CHERRY_APP_ID,
     },
-    process.env.CHERRY_APP_SECRET,   // From Cherry Admin Panel
+    process.env.CHERRY_APP_SECRET!,
     {
       algorithm: 'HS256',
       expiresIn: '5m',
-      jwtid: crypto.randomUUID(),    // Replay protection
+      jwtid: crypto.randomUUID(),
     }
   );
+
   res.json({ token });
 });
 ```
 
-**Next.js API Route:**
-
-```typescript
-// app/api/cherry/embed-token/route.ts
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
-import { getServerSession } from 'next-auth'; // or your auth method
-
-export async function GET(req: Request) {
-  const session = await getServerSession();
-  if (!session?.user?.walletAddress) {
-    return Response.json({ error: 'Not authenticated' }, { status: 401 });
-  }
-
-  const token = jwt.sign(
-    {
-      sub: session.user.walletAddress,
-      app_id: process.env.CHERRY_APP_ID!,
-    },
-    process.env.CHERRY_APP_SECRET!,
-    { algorithm: 'HS256', expiresIn: '5m', jwtid: crypto.randomUUID() }
-  );
-
-  return Response.json({ token });
-}
-```
-
-**Python / FastAPI:**
-
-```python
-import jwt, uuid, os
-from datetime import datetime, timedelta
-
-@app.get("/api/cherry/embed-token")
-async def embed_token(user = Depends(get_current_user)):
-    token = jwt.encode(
-        {
-            "sub": user.wallet_address,
-            "app_id": os.environ["CHERRY_APP_ID"],
-            "exp": datetime.utcnow() + timedelta(minutes=5),
-            "jti": str(uuid.uuid4()),
-        },
-        os.environ["CHERRY_APP_SECRET"],
-        algorithm="HS256",
-    )
-    return {"token": token}
-```
-
-Add these environment variables to your backend:
-```bash
-CHERRY_APP_ID=your-app-id
-CHERRY_APP_SECRET=your-app-secret
-```
-
-### Step 4: Frontend — Mount the Chat Widget
-
-**React / Next.js:**
-
-```tsx
-import { useEffect, useRef, useState } from 'react';
+```ts
 import { CherryEmbed } from '@cherrydotfun/embed-sdk';
 
-function ChatWidget({ walletAddress }: { walletAddress: string }) {
-  const chatRef = useRef<CherryEmbed | null>(null);
-  const [isReady, setIsReady] = useState(false);
+const { token } = await fetch('/api/cherry/embed-token').then((res) => res.json());
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      // 1. Fetch embed token from your backend
-      const res = await fetch('/api/cherry/embed-token');
-      const { token } = await res.json();
-
-      if (!mounted) return;
-
-      // 2. Create and mount the embed
-      const chat = new CherryEmbed({
-        appId: 'your-app-id',
-        container: '#cherry-chat',
-        roomId: 'your-room-id',
-        token,
-        theme: {
-          mode: 'dark',
-          primaryColor: '#7C3AED',
-        },
-      });
-
-      await chat.mount();
-      chatRef.current = chat;
-      setIsReady(true);
-
-      // 3. Handle token refresh
-      chat.on('tokenExpired', async () => {
-        const res = await fetch('/api/cherry/embed-token');
-        const { token: newToken } = await res.json();
-        chat.setToken(newToken);
-      });
-    }
-
-    init().catch(console.error);
-
-    return () => {
-      mounted = false;
-      chatRef.current?.destroy();
-    };
-  }, [walletAddress]);
-
-  return <div id="cherry-chat" style={{ width: '100%', height: '600px' }} />;
-}
-```
-
-**Vanilla JavaScript:**
-
-```html
-<div id="cherry-chat" style="width: 400px; height: 600px;"></div>
-<script src="https://cdn.cherry.fun/embed/v1/cherry-embed.min.js"></script>
-<script>
-  async function initChat() {
-    const res = await fetch('/api/cherry/embed-token', {
-      headers: { Authorization: 'Bearer ' + sessionToken },
-    });
-    const { token } = await res.json();
-
-    const chat = new CherryEmbedSDK.CherryEmbed({
-      appId: 'your-app-id',
-      container: '#cherry-chat',
-      roomId: 'your-room-id',
-      token: token,
-    });
-    await chat.mount();
-
-    chat.on('tokenExpired', async () => {
-      const res = await fetch('/api/cherry/embed-token', {
-        headers: { Authorization: 'Bearer ' + sessionToken },
-      });
-      const { token: newToken } = await res.json();
-      chat.setToken(newToken);
-    });
-  }
-
-  initChat();
-</script>
-```
-
-### Step 5: Theming
-
-Match the chat widget to your app's design:
-
-```typescript
 const chat = new CherryEmbed({
-  // ...
+  appId: 'app_xxx',
+  container: '#cherry-chat',
+  roomId: 'room_xxx',
+  token,
+  theme: { mode: 'dark', primaryColor: '#7C3AED' },
+});
+
+await chat.mount();
+
+chat.on('tokenExpired', async () => {
+  const { token: nextToken } = await fetch('/api/cherry/embed-token').then((res) => res.json());
+  chat.setToken(nextToken);
+});
+```
+
+### `app-trusted+wallet`
+
+Use when Cherry must trust both the host backend token and the user's live wallet signature. This mode has an important lifecycle rule: pass `walletAddress` and `signChallengeHandler` in the `CherryEmbed` constructor before `mount()`. Initial auth commands can trigger `signChallenge` immediately after the iframe bridge becomes ready.
+
+```ts
+import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+
+const { token } = await fetch('/api/cherry/embed-token').then((res) => res.json());
+
+const chat = new CherryEmbed({
+  appId: 'app_xxx',
+  container: '#cherry-chat',
+  roomId: 'room_xxx',
+  token,
+  walletAddress: publicKey.toBase58(),
+  signChallengeHandler: async (messageBytes) => {
+    const signed = await wallet.signMessage(messageBytes);
+    return signed.signature ?? signed;
+  },
+});
+
+await chat.mount();
+
+chat.on('tokenExpired', async () => {
+  const { token: nextToken } = await fetch('/api/cherry/embed-token').then((res) => res.json());
+  chat.setToken(nextToken);
+});
+```
+
+Do not use this pattern for initial auth:
+
+```ts
+await chat.mount();
+chat.onSignChallenge(handler);
+```
+
+That can race with the iframe's first `signChallenge` request.
+
+### `wallet-only`
+
+Use when the host does not have a Cherry app secret backend, or when the embed should manage wallet UX inside the iframe. No token endpoint is required.
+
+```ts
+import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+
+const chat = new CherryEmbed({
+  appId: 'app_xxx',
+  container: '#cherry-chat',
+  roomId: 'room_xxx',
+});
+
+await chat.mount();
+```
+
+If the host must reuse its existing wallet UX in wallet-only mode, provide `walletAddress` and `signChallengeHandler` in the constructor. Prefer the iframe-managed flow unless there is a product requirement to keep wallet prompts in the host app.
+
+## Common Configuration
+
+```ts
+const chat = new CherryEmbed({
+  appId: 'app_xxx',
+  container: '#cherry-chat',
+  roomId: 'room_xxx',
+  position: 'inline',
   theme: {
-    mode: 'dark',                    // 'dark' | 'light'
-    primaryColor: '#7C3AED',         // Buttons, links
-    accentColor: '#FF6B6B',          // Secondary accent
-    backgroundColor: '#1a1a2e',      // Chat background
-    surfaceColor: '#16213e',         // Message bubbles, input
-    textColor: '#e0e0e0',            // Primary text
-    textSecondaryColor: '#8a8a9a',   // Timestamps, hints
-    fontFamily: 'Inter',             // Font (web-safe or Google Fonts)
-    fontSize: 'md',                  // 'sm' (13px) | 'md' (14px) | 'lg' (16px)
-    borderRadius: '12px',            // Corner radius
-    avatarShape: 'circle',           // 'circle' | 'square'
-    compact: false,                  // Reduced spacing for small widgets
+    mode: 'dark',
+    primaryColor: '#7C3AED',
+    backgroundColor: '#111827',
+    surfaceColor: '#1F2937',
+    textColor: '#F9FAFB',
+    fontFamily: 'Inter, system-ui, sans-serif',
+    fontSize: 'md',
+    borderRadius: '8px',
+    avatarShape: 'circle',
+    compact: false,
   },
   layout: {
-    showHeader: true,                // Room title bar
-    headerTitle: 'Community Chat',   // Custom title
-    showMemberCount: true,           // "42 members" in header
-    showAvatars: true,               // User avatars next to messages
-    showTimestamps: true,            // Message timestamps
-    showReactions: true,             // Emoji reactions
-    showInput: true,                 // Message input (false = read-only)
+    showHeader: true,
+    headerTitle: 'Community Chat',
+    showMemberCount: true,
+    showAvatars: true,
+    showTimestamps: true,
+    showReactions: true,
+    showInput: true,
   },
 });
 ```
 
-ASK THE USER:
-```
-What are your app's primary and background colors? I'll configure the theme to match.
-```
+Keep the container dimensions stable:
 
-### Step 6: Event Handling
-
-Listen to chat events for integration with your app's UI:
-
-```typescript
-// Unread badge on your navigation
-chat.on('unreadCount', (count) => {
-  document.querySelector('#chat-badge').textContent = count > 0 ? String(count) : '';
-});
-
-// New message notification
-chat.on('message', ({ roomId, senderId, timestamp }) => {
-  // Show toast, play sound, etc.
-});
-
-// Auth state tracking
-chat.on('authStateChange', (authenticated) => {
-  console.log('Chat auth:', authenticated);
-});
-
-// Error handling
-chat.on('error', ({ code, message }) => {
-  console.error('Chat error:', code, message);
-});
+```html
+<div id="cherry-chat" style="width: 100%; height: 600px;"></div>
 ```
 
-### Step 7: Widget Positioning
+## Events
 
-**Inline** (embedded in page layout):
-```typescript
-const chat = new CherryEmbed({
-  position: 'inline',
-  container: '#chat-section',
-  // ...
-});
+```ts
+chat.on('ready', () => {});
+chat.on('authStateChange', (authenticated) => {});
+chat.on('unreadCount', (count) => {});
+chat.on('message', ({ roomId, senderId, timestamp }) => {});
+chat.on('tokenExpired', refreshToken);
+chat.on('error', ({ code, message }) => {});
 ```
 
-**Floating** (fixed bottom corner):
-```typescript
-const chat = new CherryEmbed({
-  position: 'floating-right',  // or 'floating-left'
-  container: document.body,
-  collapsed: true,             // Start minimized
-  // ...
-});
+Destroy old instances during route changes, wallet changes, or React cleanup:
 
-// Toggle with a button
-document.querySelector('#chat-toggle').onclick = () => chat.toggle();
+```ts
+return () => {
+  chat.destroy();
+};
 ```
 
-### Step 8: Verify
+## Security Rules
 
-1. Open your app with a connected wallet
-2. The chat should load automatically (no wallet popup from Cherry)
-3. Messages from the public room should appear
-4. Sending a message should work
-5. Check browser console for `[EmbedShell] Embed auth success`
-6. Check your server logs for the `/api/cherry/embed-token` call
+- Never expose `appSecret` in browser code, static HTML, mobile bundles, logs, or frontend env vars.
+- Configure Cherry Admin `allowedOrigins` to include the host origin.
+- Token `sub` must be a valid Solana public key.
+- Use short-lived tokens and refresh through `tokenExpired`.
+- Include `jti` in backend-issued tokens.
+- Register `signChallengeHandler` in the constructor for any flow that sets `walletAddress` during initial mount.
+- The iframe bridge protocol uses `id` for request correlation, not `requestId`.
+- Live security suites require running Cherry server, host backend, Redis, and three configured app modes before their results are meaningful.
 
-If the chat shows "Connect Wallet" instead of loading automatically, check:
-- Is your backend returning a valid JWT?
-- Is the `sub` claim a valid Solana wallet address?
-- Is `CHERRY_APP_SECRET` correct?
-- Is the embed app active in Cherry Admin Panel?
+## Verification
 
-## Common Mistakes
+For SDK changes inside `cherry-embed-sdk`, run:
 
-| Mistake | Fix |
-|---------|-----|
-| `appSecret` in frontend code | NEVER expose appSecret on the client. It must stay on your backend. |
-| Token without `jti` claim | Always include `jti: crypto.randomUUID()` — Cherry rejects tokens without it (replay protection). |
-| Token expired before use | Use `expiresIn: '5m'` and refresh via `tokenExpired` event. Don't pre-generate tokens at build time. |
-| Wrong `sub` format | `sub` must be a valid base58-encoded Solana public key, not a username or email. |
-| CORS errors | Cherry API must allow your embed domain. For dev, the embed app runs on `localhost:3002`. |
-| Chat shows but no messages | User may not be a member of the room. Cherry auto-joins public rooms on first embed auth. |
-| Multiple CherryEmbed instances | Call `chat.destroy()` before creating a new instance. Only one embed per container. |
-
-## Lifecycle
-
+```bash
+npm run typecheck
+npm test
+npm run build
 ```
-mount() called
-  → iframe created
-  → bridge ready event ← iframe
-  → auth.token sent → iframe
-  → iframe: POST /api/embed/auth → Cherry JWT
-  → iframe: WebSocket connected
-  → iframe: room joined, messages loaded
-  → ready event → host
-  → authStateChange(true) → host
 
-tokenExpired event → host
-  → host fetches new token from backend
-  → chat.setToken(newToken)
-  → iframe re-authenticates
+For embed app changes inside `messaging-server/embed`, run:
 
-destroy() called
-  → bridge destroyed
-  → iframe removed from DOM
-  → all listeners cleared
+```bash
+bun run test
+bun run build
 ```
+
+For live security testing, first start the required services and configure:
+- `APP_TRUSTED_ID` / `APP_TRUSTED_SECRET`
+- `APP_WALLET_ID` / `APP_WALLET_SECRET`
+- `APP_WALLETLESS_ID`

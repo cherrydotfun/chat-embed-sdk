@@ -1,11 +1,34 @@
-import { EmbedBridge } from './bridge';
+import { EmbedBridge, base64ToBytes, bytesToBase64 } from './bridge';
 import { createEmbedIframe, getEmbedOrigin } from './iframe';
-import type { CherryEmbedConfig, EmbedEventMap, EmbedLayout, EmbedTheme } from './types';
+import type {
+  CherryEmbedConfig,
+  EmbedEventMap,
+  EmbedLayout,
+  EmbedTheme,
+  SignChallengeHandler,
+} from './types';
+import { isSignChallengeRequest } from './types';
 
 type EventCallback<K extends keyof EmbedEventMap> = EmbedEventMap[K] extends void
   ? () => void
   : (data: EmbedEventMap[K]) => void;
 
+/**
+ * Callback type for `chat.onSignChallenge`.
+ *
+ * The host provides this function. It receives the raw message bytes to sign
+ * (decoded from base64 by the SDK) and must return a Promise that resolves
+ * with the signature bytes. The SDK encodes the result back to base64 and
+ * sends it to the iframe.
+ *
+ * Example with Phantom:
+ * ```ts
+ * chat.onSignChallenge(async (message) => {
+ *   const { signature } = await provider.signMessage(message, 'utf8');
+ *   return signature;
+ * });
+ * ```
+ */
 export class CherryEmbed {
   private readonly config: CherryEmbedConfig;
   private containerEl: HTMLElement | null = null;
@@ -16,10 +39,16 @@ export class CherryEmbed {
   private _isAuthenticated = false;
   private _isVisible = true;
 
+  /** Current wallet address (may be set before or after mount). */
+  private _walletAddress: string | undefined;
+  private signChallengeHandler: SignChallengeHandler | undefined;
+
   constructor(config: CherryEmbedConfig) {
     if (!config.appId) throw new Error('CherryEmbed: appId is required');
     if (!config.container) throw new Error('CherryEmbed: container is required');
     this.config = config;
+    this._walletAddress = config.walletAddress;
+    this.signChallengeHandler = config.signChallengeHandler;
   }
 
   async mount(): Promise<void> {
@@ -42,6 +71,9 @@ export class CherryEmbed {
     // 3. Create bridge
     const origin = getEmbedOrigin(this.config.embedUrl);
     this.bridge = new EmbedBridge(this.iframe, origin);
+    if (this.signChallengeHandler) {
+      this.registerSignChallengeHandler(this.bridge, this.signChallengeHandler);
+    }
 
     // 4. Setup event forwarding before waiting for ready
     this.setupEventForwarding();
@@ -67,8 +99,18 @@ export class CherryEmbed {
 
   private sendInitConfigs(): void {
     if (!this.bridge) return;
+    // Unconditional handshake: the iframe bridge captures `parentOrigin`
+    // from the first validated command. In minimal integrations (e.g.
+    // wallet-only with no host wallet, no theme overrides) the host would
+    // otherwise never send anything and the iframe could not call
+    // bridge.signChallenge / bridge.sendRequest. setTheme({}) is a no-op
+    // on the iframe side (sanitiseThemeParams returns an empty merge).
+    this.bridge.sendCommand('setTheme', {});
     if (this.config.token) {
       this.bridge.sendCommand('auth.token', { token: this.config.token });
+    }
+    if (this._walletAddress) {
+      this.bridge.sendCommand('setWalletAddress', { walletAddress: this._walletAddress });
     }
     if (this.config.theme) {
       this.bridge.sendCommand('setTheme', this.config.theme as Record<string, unknown>);
@@ -111,6 +153,87 @@ export class CherryEmbed {
     // we want for the regular `ready` re-send path, but NOT for explicit
     // refresh via setToken (which is called in response to `tokenExpired`).
     this.bridge?.sendCommand('auth.token', { token, force: true });
+  }
+
+  /**
+   * Sign the iframe out — clears its sessionStorage JWT and reloads the
+   * iframe. After reload it boots in preview mode (or shows the wallet CTA
+   * for wallet-only / app-trusted+wallet apps).
+   *
+   * Use this for testing the preview→auth flow without closing the tab, or
+   * for explicit "Sign out" UI in the host.
+   */
+  signOut(): void {
+    // Drop cached token from in-memory config so a future re-mount doesn't
+    // automatically re-authenticate from the stale value.
+    (this.config as { token?: string }).token = undefined;
+    this.bridge?.sendCommand('auth.logout', {});
+  }
+
+  /**
+   * Inform the iframe of the currently connected wallet address.
+   *
+   * This is useful when the host knows the wallet address before the iframe
+   * needs to start a `signChallenge` flow, so the iframe can display the
+   * address early.
+   *
+   * Call this after `mount()` or pass `walletAddress` in the constructor
+   * config to have it sent automatically when the iframe is ready.
+   */
+  setWalletAddress(address: string): void {
+    this._walletAddress = address;
+    // Sync config so sendInitConfigs() re-sends on iframe reload
+    (this.config as { walletAddress?: string }).walletAddress = address;
+    this.bridge?.sendCommand('setWalletAddress', { walletAddress: address });
+  }
+
+  /**
+   * Register a callback that the SDK calls when the embedded iframe requests
+   * a wallet signature (the `signChallenge` bridge request).
+   *
+   * The handler receives raw message bytes (decoded from base64) and must
+   * return a Promise resolving to the signature bytes. The SDK handles
+   * base64 encode/decode on both sides — the handler only deals with
+   * `Uint8Array`.
+   *
+   * If no handler is registered when the iframe sends a `signChallenge`
+   * request, the bridge responds with a `METHOD_NOT_FOUND` error.
+   *
+   * Example — Phantom wallet:
+   * ```ts
+   * chat.onSignChallenge(async (message) => {
+   *   const result = await window.phantom.solana.signMessage(message, 'utf8');
+   *   return result.signature;
+   * });
+   * ```
+   *
+   * Example — test stub (TweetNaCl):
+   * ```ts
+   * import nacl from 'tweetnacl';
+   * const keypair = nacl.sign.keyPair();
+   * chat.onSignChallenge(async (message) => {
+   *   return nacl.sign.detached(message, keypair.secretKey);
+   * });
+   * ```
+   */
+  onSignChallenge(handler: SignChallengeHandler): void {
+    this.signChallengeHandler = handler;
+    (this.config as { signChallengeHandler?: SignChallengeHandler }).signChallengeHandler = handler;
+    if (!this.bridge) {
+      throw new Error(
+        'CherryEmbed: call onSignChallenge() after mount() or pass signChallengeHandler in the constructor — ' +
+        'the bridge is not yet initialised.',
+      );
+    }
+    this.registerSignChallengeHandler(this.bridge, handler);
+  }
+
+  /**
+   * Remove a previously registered signChallenge handler.
+   * After this call the bridge responds with METHOD_NOT_FOUND for new requests.
+   */
+  offSignChallenge(): void {
+    this.bridge?.offIncomingRequest('signChallenge');
   }
 
   show(): void {
@@ -161,6 +284,10 @@ export class CherryEmbed {
     return this._isVisible;
   }
 
+  get walletAddress(): string | undefined {
+    return this._walletAddress;
+  }
+
   // ---- Private ----
 
   private emit(event: string, data?: unknown): void {
@@ -183,6 +310,8 @@ export class CherryEmbed {
       'authStateChange',
       'tokenExpired',
       'error',
+      'walletConnectRequested',
+      'preview',
     ];
 
     for (const event of events) {
@@ -193,6 +322,27 @@ export class CherryEmbed {
         this.emit(event, data);
       });
     }
+  }
+
+  /**
+   * Wire the signChallenge incoming-request handler on the bridge.
+   * Separated so it can be called from `onSignChallenge` (post-mount) and
+   * potentially from `mount()` if a handler was already registered via config.
+   */
+  private registerSignChallengeHandler(bridge: EmbedBridge, handler: SignChallengeHandler): void {
+    bridge.onIncomingRequest<Record<string, unknown>, { signature: string }>(
+      'signChallenge',
+      async (params) => {
+        // Validate the request shape before dispatching
+        const fakeReq = { type: 'cherry:request' as const, id: '', method: 'signChallenge' as const, params };
+        if (!isSignChallengeRequest(fakeReq)) {
+          throw new Error('Invalid signChallenge params: missing base64 "message" field');
+        }
+        const messageBytes = base64ToBytes(fakeReq.params.message);
+        const signatureBytes = await handler(messageBytes);
+        return { signature: bytesToBase64(signatureBytes) };
+      },
+    );
   }
 
   private waitForReady(timeoutMs: number): Promise<void> {

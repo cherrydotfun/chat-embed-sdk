@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cherry Embed — app-trusted example</title>
+  <script src="/cherry-embed.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0d11;
+      --surface:     #16161e;
+      --surface2:    #1e1e28;
+      --border:      #2a2a38;
+      --primary:     #b054f7;
+      --primary-dim: #7c3ab0;
+      --accent:      #f54b7c;
+      --text:        #e8e8f0;
+      --text-muted:  #6b6b80;
+      --green:       #3dd68c;
+      --yellow:      #f5c842;
+      --red:         #f5504b;
+      --mono:        'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    .header {
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-logo {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      background: rgba(176, 84, 247, 0.15);
+      color: var(--primary);
+      border-radius: 20px;
+      border: 1px solid rgba(176, 84, 247, 0.3);
+    }
+
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      min-height: 0;
+    }
+
+    .panel-left {
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .panel-right {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .chat-wrapper {
+      width: 100%;
+      max-width: 480px;
+      height: 600px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    #chat-container { width: 100%; height: 100%; }
+
+    .placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .placeholder-icon { font-size: 40px; opacity: 0.35; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 9px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+
+    .card-body {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+
+    .value {
+      font-size: 12px;
+      font-family: var(--mono);
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 190px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-ok      { background: rgba(61,214,140,0.15); color: var(--green); }
+    .badge-warn    { background: rgba(245,200,66,0.15); color: var(--yellow); }
+    .badge-err     { background: rgba(245,80,75,0.15); color: var(--red); }
+    .badge-neutral { background: var(--surface2); color: var(--text-muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover:not(:disabled) { background: var(--border); }
+
+    .info-box {
+      background: rgba(176, 84, 247, 0.06);
+      border: 1px solid rgba(176, 84, 247, 0.2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .info-box strong { color: var(--text); }
+
+    .log-panel {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .log-title {
+      padding: 7px 20px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .log-clear { font-size: 11px; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+    .log-clear:hover { background: var(--surface2); color: var(--text); }
+
+    #log {
+      height: 100px;
+      overflow-y: auto;
+      padding: 6px 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .log-line { display: flex; gap: 10px; }
+    .log-ts   { color: var(--text-muted); flex-shrink: 0; }
+    .log-key  { color: var(--primary); flex-shrink: 0; }
+    .log-val  { color: var(--text); word-break: break-all; }
+
+    @media (max-width: 800px) {
+      .main { grid-template-columns: 1fr; }
+      .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header class="header">
+    <span class="header-logo">Cherry Chat</span>
+    <span class="header-badge">app-trusted</span>
+    <span style="color:var(--text-muted);font-size:12px">zero-signature, host backend auth</span>
+  </header>
+
+  <div class="main">
+
+    <!-- Left panel: status + controls -->
+    <aside class="panel-left">
+
+      <div class="info-box">
+        <strong>authMode: app-trusted</strong><br />
+        No wallet adapter needed. The host backend is the sole source of trust —
+        it issues an embedToken asserting the user's identity. The user never
+        sees a wallet popup in this mode.
+      </div>
+
+      <!-- Config card -->
+      <div class="card">
+        <div class="card-header">Configuration</div>
+        <div class="card-body">
+          <div class="row">
+            <span class="label">App ID</span>
+            <span class="value" id="cfg-appId">loading...</span>
+          </div>
+          <div class="row">
+            <span class="label">Embed URL</span>
+            <span class="value" id="cfg-embedUrl">loading...</span>
+          </div>
+          <div class="row">
+            <span class="label">Status</span>
+            <span id="cfg-status"><span class="badge badge-neutral">Loading</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Simulated user card -->
+      <div class="card">
+        <div class="card-header">Simulated User Session</div>
+        <div class="card-body">
+          <!--
+            In a real integration this walletAddress comes from your auth system
+            (session cookie, JWT, OAuth token, etc.). Here it is hardcoded for
+            demo purposes so you can run the example without a full auth stack.
+          -->
+          <div class="row">
+            <span class="label">Wallet address</span>
+            <span class="value" id="sim-wallet">7xKXtg...Pump</span>
+          </div>
+          <div class="row">
+            <span class="label">Source</span>
+            <span class="value" style="color:var(--text-muted)">hardcoded (see HTML comment)</span>
+          </div>
+          <button class="btn btn-primary" id="btn-signin" onclick="signIn()" disabled>
+            Sign in as demo user
+          </button>
+          <button class="btn btn-secondary" id="btn-signout" onclick="signOut()" style="display:none">
+            Sign out (test preview)
+          </button>
+          <p style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
+            Until you sign in, the chat is in <strong>preview</strong> mode —
+            you can read public messages but cannot send or react. Clicking
+            send/react inside the iframe also triggers sign-in.
+          </p>
+        </div>
+      </div>
+
+      <!-- Embed token card -->
+      <div class="card">
+        <div class="card-header">Embed Token (JWT)</div>
+        <div class="card-body">
+          <div class="row">
+            <span class="label">Status</span>
+            <span id="token-status"><span class="badge badge-neutral">Waiting</span></span>
+          </div>
+          <div class="row" id="token-exp-row" style="display:none">
+            <span class="label">Expires</span>
+            <span class="value" id="token-exp">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SDK events card -->
+      <div class="card">
+        <div class="card-header">SDK Events</div>
+        <div class="card-body" id="events-body">
+          <div class="row">
+            <span class="label">ready</span>
+            <span class="badge badge-neutral" id="evt-ready">—</span>
+          </div>
+          <div class="row">
+            <span class="label">authStateChange</span>
+            <span class="badge badge-neutral" id="evt-auth">—</span>
+          </div>
+          <div class="row">
+            <span class="label">unreadCount</span>
+            <span class="badge badge-neutral" id="evt-unread">—</span>
+          </div>
+          <div class="row">
+            <span class="label">tokenExpired</span>
+            <span class="badge badge-neutral" id="evt-expired">—</span>
+          </div>
+          <div class="row">
+            <span class="label">error</span>
+            <span class="badge badge-neutral" id="evt-error">—</span>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Right: embedded chat -->
+    <main class="panel-right">
+      <div class="chat-wrapper">
+        <div id="chat-container">
+          <div class="placeholder">
+            <div class="placeholder-icon">&#128172;</div>
+            <p>Loading chat preview…</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div><!-- /.main -->
+
+  <!-- Compact log at the bottom -->
+  <div class="log-panel">
+    <div class="log-title">
+      <span>Event Log</span>
+      <button class="log-clear" onclick="clearLog()">Clear</button>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</div><!-- /.app -->
+
+<script>
+// ============================================================
+//  In a real integration this comes from your auth system.
+//  Here it is hardcoded to keep the example self-contained.
+// ============================================================
+const DEMO_WALLET_ADDRESS = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+
+document.getElementById('sim-wallet').textContent =
+  DEMO_WALLET_ADDRESS.slice(0, 6) + '...' + DEMO_WALLET_ADDRESS.slice(-4);
+
+let appConfig = null;
+let chat = null;
+let tokenRefreshTimer = null;
+
+// ============================================================
+//  Logging
+// ============================================================
+function log(key, val) {
+  const el = document.getElementById('log');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const valStr = val === undefined ? '' : (typeof val === 'object' ? JSON.stringify(val) : String(val));
+  line.innerHTML =
+    `<span class="log-ts">${ts}</span>` +
+    `<span class="log-key">${esc(key)}</span>` +
+    (valStr ? `<span class="log-val">${esc(valStr)}</span>` : '');
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ============================================================
+//  Load server config
+// ============================================================
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    appConfig = await res.json();
+
+    document.getElementById('cfg-appId').textContent = appConfig.appId || '(not set)';
+    document.getElementById('cfg-embedUrl').textContent = appConfig.embedUrl;
+
+    const statusEl = document.getElementById('cfg-status');
+    if (appConfig.configured) {
+      statusEl.innerHTML = '<span class="badge badge-ok">Ready</span>';
+    } else {
+      statusEl.innerHTML = '<span class="badge badge-warn">Missing .env values</span>';
+      // btn-signin stays disabled until preview successfully mounts
+    }
+
+    log('config.loaded', { configured: appConfig.configured });
+  } catch (err) {
+    log('config.error', String(err));
+  }
+}
+
+// ============================================================
+//  Fetch embed token from backend
+// ============================================================
+async function fetchEmbedToken(walletAddress) {
+  document.getElementById('token-status').innerHTML =
+    '<span class="badge badge-neutral">Generating...</span>';
+
+  const res = await fetch('/api/embed-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // In a real app the backend gets walletAddress from the session,
+    // not from the request body. This is demo-only.
+    body: JSON.stringify({ walletAddress }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to fetch embed token');
+  }
+
+  const { embedToken } = await res.json();
+
+  // Decode expiry from JWT payload (client-side, no secret needed)
+  const payload = JSON.parse(atob(embedToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+  const expDate = new Date(payload.exp * 1000);
+
+  document.getElementById('token-status').innerHTML =
+    '<span class="badge badge-ok">Active</span>';
+  document.getElementById('token-exp').textContent =
+    `${Math.round((expDate - Date.now()) / 1000)}s (${expDate.toLocaleTimeString()})`;
+  document.getElementById('token-exp-row').style.display = '';
+
+  log('embedToken.issued', { sub: payload.sub, exp: payload.exp });
+
+  // Schedule auto-refresh 30 s before expiry
+  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+  const refreshIn = Math.max(0, expDate - Date.now() - 30_000);
+  tokenRefreshTimer = setTimeout(async () => {
+    log('embedToken.autoRefresh', 'refreshing before expiry');
+    try {
+      const newToken = await fetchEmbedToken(walletAddress);
+      chat.setToken(newToken);
+      log('chat.setToken', 'token updated');
+    } catch (err) {
+      log('embedToken.refreshError', String(err));
+    }
+  }, refreshIn);
+
+  return embedToken;
+}
+
+// ============================================================
+//  Mount the chat in preview mode — no token yet.
+//  The iframe will fetch public messages via /api/embed/preview/...
+//  and render them in read-only mode. Send/react buttons are disabled
+//  inside the iframe and emit `walletConnectRequested` on click.
+// ============================================================
+async function mountPreview() {
+  document.getElementById('chat-container').innerHTML = '';
+
+  chat = new CherryEmbedSDK.CherryEmbed({
+    appId: appConfig.appId,
+    container: '#chat-container',
+    // NO token — iframe enters preview mode and shows public messages
+    // until the host calls chat.setToken(...) below.
+    walletAddress: DEMO_WALLET_ADDRESS, // for display inside the widget
+    roomId: appConfig.roomId || undefined,
+    embedUrl: appConfig.embedUrl,
+  });
+
+  // ── Standard SDK events ────────────────────────────────────────────────
+  chat.on('ready', () => {
+    setEvt('ready', 'fired', 'badge-ok');
+    log('sdk.ready');
+  });
+
+  chat.on('authStateChange', (ok) => {
+    setEvt('auth', ok ? 'authenticated' : 'signed-out', ok ? 'badge-ok' : 'badge-neutral');
+    log('sdk.authStateChange', ok);
+    // When sign-in completes, hide the sign-in button
+    if (ok) {
+      const signinBtn = document.getElementById('btn-signin');
+      signinBtn.disabled = true;
+      signinBtn.textContent = 'Signed in';
+      document.getElementById('btn-signout').style.display = '';
+    } else {
+      const signinBtn = document.getElementById('btn-signin');
+      signinBtn.disabled = false;
+      signinBtn.textContent = 'Sign in as demo user';
+      document.getElementById('btn-signout').style.display = 'none';
+    }
+  });
+
+  chat.on('unreadCount', (n) => {
+    setEvt('unread', String(n), 'badge-ok');
+    log('sdk.unreadCount', n);
+  });
+
+  chat.on('tokenExpired', () => {
+    setEvt('expired', 'expired', 'badge-warn');
+    log('sdk.tokenExpired', 'fetching fresh token');
+    // Auto re-sign on expiry
+    signIn().catch((err) => log('autoResign.error', String(err)));
+  });
+
+  chat.on('error', (err) => {
+    setEvt('error', err.code, 'badge-err');
+    log('sdk.error', err);
+  });
+
+  // ── Preview / sign-in coordination ─────────────────────────────────────
+  // Iframe transitioned into preview mode — read-only public messages visible.
+  chat.on('preview', (data) => {
+    log('sdk.preview', data);
+  });
+
+  // User clicked send/react inside the iframe while in preview mode.
+  // In app-trusted that means: trigger sign-in (host backend issues token).
+  chat.on('walletConnectRequested', () => {
+    log('sdk.walletConnectRequested', 'iframe asked host to sign in');
+    signIn().catch((err) => log('signIn.error', String(err)));
+  });
+
+  log('chat.mounting (preview mode)', appConfig.appId);
+  await chat.mount();
+  log('chat.mounted');
+
+  // Now that the bridge is ready, allow the user to sign in.
+  document.getElementById('btn-signin').disabled = false;
+}
+
+// ============================================================
+//  Sign in: host backend issues an embedToken for DEMO_WALLET_ADDRESS,
+//  we hand it to the running iframe via chat.setToken.
+//  The iframe exchanges it for a Cherry JWT and switches from preview
+//  to authenticated mode automatically.
+// ============================================================
+async function signIn() {
+  const btn = document.getElementById('btn-signin');
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Signing in…';
+
+  try {
+    const embedToken = await fetchEmbedToken(DEMO_WALLET_ADDRESS);
+    chat.setToken(embedToken);
+    log('chat.setToken', 'handed embedToken to iframe');
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    document.getElementById('token-status').innerHTML =
+      `<span class="badge badge-err">${esc(err.message)}</span>`;
+    log('signIn.error', String(err));
+  }
+}
+
+// ============================================================
+//  Sign out: tell iframe to clear its JWT and reload.
+//  After reload the iframe re-enters preview mode and the user can verify
+//  that send/react are disabled.
+// ============================================================
+function signOut() {
+  log('chat.signOut', 'asking iframe to clear session');
+  chat.signOut();
+  // The iframe will reload itself; UI flips back to preview on authStateChange=false
+  // Pre-emptively reset token-status badge:
+  document.getElementById('token-status').innerHTML =
+    '<span class="badge badge-neutral">Waiting</span>';
+  document.getElementById('token-exp-row').style.display = 'none';
+  if (tokenRefreshTimer) {
+    clearTimeout(tokenRefreshTimer);
+    tokenRefreshTimer = null;
+  }
+}
+
+function setEvt(id, label, cls) {
+  const el = document.getElementById('evt-' + id);
+  if (!el) return;
+  el.textContent = label;
+  el.className = 'badge ' + cls;
+}
+
+// ============================================================
+//  Init — load config, then mount the iframe in preview mode.
+//  The user can read messages immediately; signing in is a single click.
+// ============================================================
+window.addEventListener('DOMContentLoaded', async () => {
+  log('page.loaded');
+  await loadConfig();
+  if (appConfig && appConfig.configured) {
+    try {
+      await mountPreview();
+    } catch (err) {
+      log('preview.mountError', String(err));
+    }
+  }
+});
+</script>
+</body>
+</html>
