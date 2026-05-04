@@ -95,98 +95,105 @@ initChat();
 
 ### 2. App-Trusted + Wallet (Default Public API)
 
-Combines backend authentication with wallet signature proof. Host backend initiates, wallet owner confirms.
+Combines backend HMAC proof with wallet-signature ownership proof. Backend issues an `embedToken` (same shape as the app-trusted flow); the iframe then independently fetches a challenge from Cherry and asks the host to sign it with the user's wallet.
 
-**Backend:**
+**Backend (identical to app-trusted — no `nonce` claim):**
 
 ```typescript
 import jwt from 'jsonwebtoken';
 
-// Step 1: Generate app proof (sent to client)
-app.get('/api/embed-proof', (req, res) => {
+app.post('/api/embed-token', (req, res) => {
   const walletAddress = req.user.walletAddress;
-  const nonce = crypto.randomBytes(16).toString('hex');
-  
-  const appProof = jwt.sign(
-    {
-      sub: walletAddress,
-      app_id: 'your-app-id',
-      nonce,
-    },
+
+  const token = jwt.sign(
+    { sub: walletAddress, app_id: 'your-app-id' },
     process.env.CHERRY_APP_SECRET,
-    { expiresIn: '5m', jwtid: crypto.randomUUID() }
+    { expiresIn: '5m', jwtid: crypto.randomUUID(), algorithm: 'HS256' },
   );
-  
-  res.json({ appProof, walletAddress, nonce });
+
+  res.json({ token });
 });
 ```
 
-**Frontend (with Phantom wallet):**
+**Frontend (host owns the wallet, e.g. via Phantom):**
 
 ```typescript
 import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 async function initChatWithWallet() {
-  // Get app proof from your backend
-  const { appProof, walletAddress, nonce } = 
-    await fetch('/api/embed-proof').then(r => r.json());
-  
+  // 1. User connects Phantom on the host page
+  const provider = window.phantom?.solana;
+  const { publicKey } = await provider.connect();
+  const walletAddress = publicKey.toString();
+
+  // 2. Host backend issues the embedToken bound to that wallet
+  const { token } = await fetch('/api/embed-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ walletAddress }),
+  }).then((r) => r.json());
+
+  // 3. Construct embed. Pass `signChallengeHandler` BEFORE mount so it is
+  //    registered before Cherry asks for the wallet signature.
   const chat = new CherryEmbed({
     appId: 'your-app-id',
     container: '#chat',
-    walletAddress, // Pass wallet address for the UI
+    token,
+    walletAddress,
     signChallengeHandler: async (message) => {
-      const provider = window.phantom?.solana;
-      if (!provider?.isConnected) throw new Error('Wallet not connected');
-
+      // Cherry server sends the bytes; host wallet signs them.
       const { signature } = await provider.signMessage(message, 'utf8');
-      return signature; // Return signature bytes
+      return signature; // Uint8Array
     },
   });
-  
+
   await chat.mount();
-
-  // After mount, send app proof to initiate authentication
-  chat.setToken(appProof);
+  // The iframe will: GET /api/embed/challenge → invoke signChallengeHandler
+  //   → POST /api/embed/auth { embedToken, signature, nonce } → Cherry JWT.
+  // The user sees one Phantom popup for the signature.
 }
-
-initChatWithWallet();
 ```
 
 **Security Model:**
-- App proof: HMAC-SHA256 signed by backend, proves app legitimacy
-- Wallet signature: Ed25519 signed by user, proves wallet ownership
-- Cherry verifies both signatures
-- Recommended for public-facing integrations
-- User sees "Connect Wallet" UI before gaining full access
+- App proof: HMAC-SHA256 over `embedToken`, signed by backend with `appSecret`
+- Wallet proof: Ed25519 signature over a server-issued challenge that binds
+  `appId`, `walletAddress`, and the parent origin
+- Cherry cross-validates that `embedToken.sub === challenge.walletAddress`
+- Recommended for public-facing integrations: an `appSecret` leak alone does
+  not yield a Cherry JWT — wallet key is required as well
 
 ---
 
-### 3. Wallet-Only (Self-Hosted)
+### 3. Wallet-Only (Self-Hosted, no backend, no host wallet integration)
 
-No backend required. User signs a challenge directly with their wallet. Minimal infrastructure, maximum proof-of-ownership.
+No backend required AND no host wallet integration required. The iframe owns the entire wallet flow: it shows its own "Connect Wallet" modal, runs its bundled `@solana/wallet-adapter-react` to connect Phantom/Solflare/etc., signs the challenge inside the iframe, and exchanges the signature for a Cherry JWT — all without round-tripping back to the host page.
 
-**Frontend:**
+**Frontend (the entire host integration):**
 
-```typescript
-import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
+```html
+<script src="https://cdn.cherry.fun/embed/v1/cherry-embed.min.js"></script>
+<div id="chat" style="height: 600px"></div>
 
-async function initChatWalletOnly() {
-  const chat = new CherryEmbed({
-    appId: 'your-public-app-id',
+<script>
+  const chat = new CherryEmbedSDK.CherryEmbed({
+    appId: 'your-public-app-id', // authMode='wallet-only' app
     container: '#chat',
+    roomId: 'optional-public-room-id',
   });
-
-  await chat.mount();
-}
+  chat.mount();
+</script>
 ```
 
+That's it. No `token`, no `walletAddress`, no `signChallengeHandler`. The user clicks the in-iframe "Connect wallet to send messages" button → wallet-adapter modal lists installed wallets → user picks one → Phantom popup (connect) → Phantom popup (sign challenge) → Cherry JWT.
+
+> **Backward compat:** if the host DOES supply `walletAddress` (and optionally a `signChallengeHandler`) to a wallet-only app, the iframe falls back to host-managed signing, just like in app-trusted+wallet mode.
+
 **Security Model:**
-- No backend required; user's wallet is sole proof
-- Cherry requests nonce challenge, user signs it
-- Signature valid for single auth session
-- Best for public rooms, decentralized apps
-- User always sees "Connect Wallet" UI
+- No backend required; the wallet's Ed25519 private key is the sole proof of identity
+- Cherry issues a per-session challenge bound to (appId, walletAddress, origin); the iframe consumes it once
+- Knowing the `appId` confers nothing — anyone with any wallet can authenticate as themselves into the public room scope
+- `appSecret` is NOT consulted in this mode; rotating it is a no-op for wallet-only auth
+- Best for public rooms, drop-in widgets, decentralized integrations
 
 ---
 
@@ -218,31 +225,37 @@ The SDK handles:
 
 ### Solana Wallet-Adapter Integration
 
-For Solana ecosystem wallets (Phantom, Solflare, Backpack, etc.), use the optional `@cherry/chat-embed-sdk-solana` package:
+For Solana ecosystem wallets (Phantom, Solflare, Backpack, etc.) the host can wire the SDK to `@solana/wallet-adapter-react` directly — no additional Cherry package required:
 
-```bash
-npm install @cherry/chat-embed-sdk-solana
-```
-
-```typescript
-import { useCherryEmbed } from '@cherry/chat-embed-sdk-solana';
+```tsx
+import { useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 export function ChatWidget() {
-  const wallet = useWallet();
-  const { mounted, error } = useCherryEmbed({
-    appId: 'your-app-id',
-    container: '#chat',
-    // Wallet is auto-wired via @solana/wallet-adapter-react
-  });
-  
-  if (!mounted) return <div>Loading...</div>;
-  if (error) return <div>Error: {error.message}</div>;
-  return <div id="chat" style={{ height: '600px' }} />;
+  const { publicKey, signMessage } = useWallet();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<CherryEmbed | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !publicKey || !signMessage) return;
+
+    const chat = new CherryEmbed({
+      appId: 'your-app-id',
+      container: containerRef.current,
+      walletAddress: publicKey.toBase58(),
+      signChallengeHandler: async (message) => signMessage(message),
+    });
+    chatRef.current = chat;
+    chat.mount();
+    return () => chat.destroy();
+  }, [publicKey, signMessage]);
+
+  return <div ref={containerRef} style={{ height: 600 }} />;
 }
 ```
 
-See [`@cherry/chat-embed-sdk-solana` README](../chat-embed-sdk-solana/README.md) for full details.
+For `wallet-only` apps you can skip the wallet integration on the host entirely (Section 3) — the iframe runs its own wallet adapter.
 
 ---
 
@@ -308,11 +321,11 @@ chat.offSignChallenge()         // Unregister signer
 chat.setWalletAddress(address)  // Set/update wallet address
 
 // Token management (token-based modes)
-chat.setToken(token)            // Authenticate with JWT token
+chat.setToken(token)            // Refresh embedToken (forces re-exchange)
+chat.signOut()                  // Drop iframe sessionStorage JWT and reload
 
 // Room control
 chat.setRoom(roomId)            // Switch to different room
-chat.on('roomChanged', cb)      // Listen for room changes (list mode)
 
 // Theming
 chat.setTheme(theme)            // Update visual theme
@@ -328,7 +341,7 @@ chat.toggle()                   // Toggle visibility
 
 ```typescript
 chat.on('ready', () => {})
-  // Fired when iframe is ready (after mount)
+  // Fired when iframe is ready (after mount, and again after iframe reload)
 
 chat.on('authStateChange', (authenticated: boolean) => {})
   // Fired when user logs in/out
@@ -338,7 +351,7 @@ chat.on('tokenExpired', () => {})
 
 chat.on('message', (data) => {})
   // Fired when new message arrives in current room
-  // data: { roomId, senderId, timestamp, content }
+  // data: { roomId, senderId, timestamp }
 
 chat.on('unreadCount', (count: number) => {})
   // Fired when unread message count changes
@@ -348,7 +361,14 @@ chat.on('error', (error) => {})
   // error: { code: string, message: string }
 
 chat.on('walletConnectRequested', () => {})
-  // Fired when user needs to connect wallet (wallet-signature modes)
+  // Fired when iframe asks the host to bring the wallet flow forward.
+  // - app-trusted+wallet: host should connect wallet, call setWalletAddress
+  // - wallet-only: only fired in the legacy host-managed path; the
+  //   self-contained wallet-only flow handles connect inside the iframe
+
+chat.on('preview', ({ visible, gated }) => {})
+  // Fired when iframe enters read-only preview mode (room visible, no JWT).
+  // Use to render a "Sign in" prompt next to the widget.
 ```
 
 ### Theme Configuration
@@ -361,7 +381,7 @@ const theme: EmbedTheme = {
   backgroundColor: '#1a1a2e',      // Page background
   surfaceColor: '#16213e',         // Card/surface background
   textColor: '#e0e0e0',            // Primary text
-  secondaryTextColor: '#a0a0a0',   // Secondary text (timestamps)
+  textSecondaryColor: '#a0a0a0',   // Secondary text (timestamps)
   fontFamily: 'Inter, sans-serif',
   fontSize: 'md',                  // 'sm' | 'md' | 'lg'
   borderRadius: '12px',
@@ -392,29 +412,35 @@ chat.setLayout(layout);
 
 For advanced integration, the SDK communicates with the iframe via postMessage. Most use cases don't need this, but here's the protocol for reference:
 
-**Commands (Host → Iframe):**
+**Commands (Host → Iframe):** envelope is `{ type: 'cherry:cmd', method, params }`
 
 ```javascript
 // Set authentication token
-{ type: 'cherry:cmd', command: 'auth.token', data: { token: '...' } }
+{ type: 'cherry:cmd', method: 'auth.token', params: { token: '...' } }
+
+// Force re-exchange even if a JWT is already cached in iframe sessionStorage
+{ type: 'cherry:cmd', method: 'auth.token', params: { token: '...', force: true } }
+
+// Sign out — clears iframe sessionStorage and hard-reloads
+{ type: 'cherry:cmd', method: 'auth.logout', params: {} }
 
 // Set wallet address
-{ type: 'cherry:cmd', command: 'setWalletAddress', data: { address: '...' } }
+{ type: 'cherry:cmd', method: 'setWalletAddress', params: { walletAddress: '...' } }
 
 // Update theme
-{ type: 'cherry:cmd', command: 'setTheme', data: { mode: 'dark', ... } }
+{ type: 'cherry:cmd', method: 'setTheme', params: { mode: 'dark', ... } }
 
 // Update layout
-{ type: 'cherry:cmd', command: 'setLayout', data: { showInput: true, ... } }
+{ type: 'cherry:cmd', method: 'setLayout', params: { showInput: true, ... } }
 
 // Switch room
-{ type: 'cherry:cmd', command: 'setRoom', data: { roomId: '...' } }
+{ type: 'cherry:cmd', method: 'setRoom', params: { roomId: '...' } }
 ```
 
-**Events (Iframe → Host):**
+**Events (Iframe → Host):** envelope is `{ type: 'cherry:event', event, data }`
 
 ```javascript
-// Iframe ready for commands
+// Iframe ready for commands (also re-fires after iframe reload)
 { type: 'cherry:event', event: 'ready' }
 
 // Authentication state changed
@@ -424,7 +450,7 @@ For advanced integration, the SDK communicates with the iframe via postMessage. 
 { type: 'cherry:event', event: 'tokenExpired' }
 
 // New message in room
-{ type: 'cherry:event', event: 'message', data: {...} }
+{ type: 'cherry:event', event: 'message', data: { roomId, senderId, timestamp } }
 
 // Unread count changed
 { type: 'cherry:event', event: 'unreadCount', data: 42 }
@@ -432,8 +458,11 @@ For advanced integration, the SDK communicates with the iframe via postMessage. 
 // Runtime error
 { type: 'cherry:event', event: 'error', data: { code: '...', message: '...' } }
 
-// Wallet connection requested (wallet-signature modes)
+// Iframe asking host to bring wallet flow forward
 { type: 'cherry:event', event: 'walletConnectRequested' }
+
+// Iframe entered preview (read-only, no JWT)
+{ type: 'cherry:event', event: 'preview', data: { visible: true, gated: false } }
 ```
 
 **Requests/Responses (Iframe ↔ Host):**
@@ -539,11 +568,9 @@ chat.on('ready', () => {
 });
 ```
 
-Or use `setToken(token, { force: true })` to force full reload without state loss:
-
-```typescript
-chat.setToken(newToken, { force: true });
-```
+`chat.setToken(newToken)` already forces the iframe to discard its cached
+JWT and re-exchange with the fresh embedToken — pass it once on
+`tokenExpired`, no extra options needed.
 
 ---
 
@@ -557,57 +584,59 @@ If you already have an app with `app-trusted` mode and want to add wallet proof:
 2. **Update Admin Panel:**
    - Go to your app → **Configuration** → **Auth Mode**
    - Change to `app-trusted+wallet`
-3. **Update backend** to generate `appProof` instead of `embedToken`:
-   ```typescript
-   // Old (still works):
-   // const token = jwt.sign({ sub: wallet, app_id }, appSecret, { expiresIn: '5m' })
-   
-   // New:
-   const appProof = jwt.sign(
-     { sub: wallet, app_id, nonce: crypto.randomUUID() },
-     appSecret,
-     { expiresIn: '5m', jwtid: crypto.randomUUID() }
-   );
-   ```
-4. **Update frontend** to register wallet signer before auth starts:
+3. **Backend stays the same.** The `embedToken` shape does not change between
+   `app-trusted` and `app-trusted+wallet` — same `sub` + `app_id` claims,
+   same HMAC signing. The wallet challenge is generated by the Cherry server
+   on demand; you do NOT need to add a `nonce` claim to the token.
+4. **Update frontend** to pass the wallet signer alongside the existing token:
    ```typescript
    const chat = new CherryEmbed({
      appId,
      container: '#chat',
-     walletAddress: wallet,
+     token,                  // unchanged — same embedToken
+     walletAddress,          // newly required — host's connected wallet
      signChallengeHandler: async (msg) => {
        return await walletAdapter.signMessage(msg);
      },
    });
-
    await chat.mount();
-   chat.setToken(appProof); // Now appProof instead of embedToken
    ```
 
-Users will see wallet confirmation UI before chat access is granted.
+Users will see one wallet popup (the signature) before chat access is granted.
 
 ---
 
 ### From Token-Based to Wallet-Only
 
-If you want to remove your backend dependency:
+If you want to remove your backend dependency entirely:
 
-1. **Update Admin Panel:** Change **Auth Mode** to `wallet-only`
-2. **Remove backend token endpoint**
-3. **Update frontend:**
+1. **Update Admin Panel:** change **Auth Mode** to `wallet-only`.
+2. **Remove the backend token endpoint** — the iframe authenticates against
+   Cherry directly via wallet signature.
+3. **Strip the host integration to the bare minimum** — drop `token`,
+   `walletAddress`, and `signChallengeHandler` from `CherryEmbed` config:
    ```typescript
-   // Remove setToken() call
-   chat.on('ready', () => {
-     // No authentication needed; wallet adapter handles it
-   });
+   const chat = new CherryEmbed({ appId, container: '#chat', roomId });
+   await chat.mount();
    ```
+   The iframe will show its own "Connect wallet" CTA, drive a wallet-adapter
+   modal, ask the user to sign the challenge inside Phantom/Solflare/etc.,
+   and exchange the signature for a Cherry JWT — all without involving the
+   host page.
+
+**Backward compat:** if you keep passing `walletAddress` (and an
+optional `signChallengeHandler`), the iframe will instead defer wallet
+operations to the host — useful when the host already has the wallet
+connected for other features (SSO, on-chain actions, etc.).
 
 ---
 
 ## Examples
 
-See complete working examples:
-- [`chat-embed-sdk/example/`](./example/) — Zero-signature example (Express + Phantom)
+See complete working examples (one per auth mode):
+- [`example/app-trusted/`](./example/app-trusted/) — Express backend issues `embedToken`, zero-signature browser flow
+- [`example/app-trusted+wallet/`](./example/app-trusted%2Bwallet/) — Express backend + Phantom on the host page (signature + token)
+- [`example/wallet-only/`](./example/wallet-only/) — Static host (no backend), iframe drives wallet connect itself
 - [GitHub recipes](https://github.com/cherrydotfun/embed-examples/) — Next.js, React, Vue, vanilla JS
 
 ---
