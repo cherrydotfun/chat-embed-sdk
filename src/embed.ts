@@ -90,6 +90,13 @@ export class CherryEmbed {
 
   private sendInitConfigs(): void {
     if (!this.bridge) return;
+    // Unconditional handshake: the iframe bridge captures `parentOrigin`
+    // from the first validated command. In minimal integrations (e.g.
+    // wallet-only with no host wallet, no theme overrides) the host would
+    // otherwise never send anything and the iframe could not call
+    // bridge.signChallenge / bridge.sendRequest. setTheme({}) is a no-op
+    // on the iframe side (sanitiseThemeParams returns an empty merge).
+    this.bridge.sendCommand('setTheme', {});
     if (this.config.token) {
       this.bridge.sendCommand('auth.token', { token: this.config.token });
     }

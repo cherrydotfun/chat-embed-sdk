@@ -39,8 +39,13 @@ const express = require('express');
 const path = require('path');
 
 const PORT = Number(process.env.PORT) || 3000;
-// Accept both short and CHERRY_-prefixed names for backwards compat with older .env files
-const APP_ID = process.env.APP_ID || process.env.CHERRY_APP_ID;
+// This example targets a wallet-only embed app. Prefer a dedicated env var
+// so it doesn't collide with the shared APP_ID used by the app-trusted /
+// app-trusted+wallet examples.
+const APP_ID =
+  process.env.APP_WALLETLESS_ID ||
+  process.env.APP_ID ||
+  process.env.CHERRY_APP_ID;
 const CHERRY_EMBED_URL = process.env.CHERRY_EMBED_URL || 'https://embed.cherry.fun';
 const ROOM_ID = process.env.ROOM_ID || process.env.CHERRY_ROOM_ID || '';
 

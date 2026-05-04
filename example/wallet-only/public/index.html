@@ -5,10 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cherry Embed — wallet-only example</title>
   <!--
-    wallet-only example: minimal Node host serves /cherry-embed.js, mapped
-    to the local SDK build at ../../../dist/index.global.js (see server.js).
+    wallet-only example — minimal host integration.
 
-    For production, replace with the CDN bundle:
+    The iframe handles wallet connect AND signature itself via its own
+    wallet adapter. This page does NOT touch Phantom at all — the Connect
+    button in the chat panel triggers the wallet popup directly from
+    inside the iframe.
+
+    Host responsibilities reduce to:
+      1. Load the SDK bundle.
+      2. Construct CherryEmbed({ appId, embedUrl, roomId }) — no wallet config.
+      3. Mount.
+
+    Switch the script src to the CDN bundle for production:
       <script src="https://cdn.cherry.fun/embed/cherry-embed.js"></script>
   -->
   <script src="/cherry-embed.js"></script>
@@ -18,657 +27,184 @@
     :root {
       --bg:          #0d0d11;
       --surface:     #16161e;
-      --surface2:    #1e1e28;
       --border:      #2a2a38;
       --primary:     #b054f7;
-      --accent:      #f54b7c;
-      --text:        #e8e8f0;
-      --text-muted:  #6b6b80;
-      --green:       #3dd68c;
-      --yellow:      #f5c842;
-      --red:         #f5504b;
-      --mono:        'JetBrains Mono', 'Fira Code', monospace;
+      --text:        #e7e7ee;
+      --text-muted:  #888896;
+      --green:       #4ade80;
     }
 
-    html, body {
-      height: 100%;
+    html, body { height: 100%; }
+    body {
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
       line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
 
-    .app { display: flex; flex-direction: column; min-height: 100vh; }
-
-    .header {
-      padding: 14px 24px;
-      background: var(--surface);
+    header {
+      padding: 14px 28px;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
+      background: var(--surface);
     }
-
-    .header-logo {
-      font-size: 18px;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .header-badge {
-      font-size: 11px;
+    header h1 {
+      font-size: 17px;
       font-weight: 600;
-      padding: 2px 8px;
-      background: rgba(61, 214, 140, 0.1);
-      color: var(--green);
-      border-radius: 20px;
-      border: 1px solid rgba(61, 214, 140, 0.25);
+      color: var(--primary);
+      letter-spacing: -0.01em;
     }
-
-    .header-no-server {
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
       font-size: 11px;
+      font-weight: 500;
+      background: rgba(74, 222, 128, 0.12);
+      color: var(--green);
+      border: 1px solid rgba(74, 222, 128, 0.25);
+    }
+    .badge.muted {
+      background: rgba(255, 255, 255, 0.04);
       color: var(--text-muted);
-      background: var(--surface2);
-      padding: 2px 8px;
-      border-radius: 20px;
+      border-color: var(--border);
+    }
+    header span.subtitle {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-left: 4px;
     }
 
-    .main {
+    main {
       flex: 1;
       display: grid;
-      grid-template-columns: 300px 1fr;
-      min-height: 0;
-    }
-
-    .panel-left {
-      border-right: 1px solid var(--border);
-      overflow-y: auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .panel-right {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .chat-wrapper {
+      grid-template-columns: 1fr 2fr;
+      gap: 24px;
+      padding: 28px;
+      max-width: 1400px;
       width: 100%;
-      max-width: 480px;
-      height: 600px;
+      margin: 0 auto;
+    }
+
+    .panel {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 16px;
-      overflow: hidden;
+      border-radius: 12px;
+      padding: 22px;
+    }
+    .panel h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .panel p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .panel code {
+      background: rgba(255, 255, 255, 0.06);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--text);
+      font-family: ui-monospace, SF Mono, Menlo, monospace;
     }
 
-    #chat-container { width: 100%; height: 100%; }
+    #chat-container {
+      min-height: 540px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
 
     .placeholder {
-      width: 100%;
-      height: 100%;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
+      flex-direction: column;
       gap: 12px;
+      height: 100%;
+      min-height: 540px;
       color: var(--text-muted);
-      font-size: 13px;
-      text-align: center;
-      padding: 24px;
-    }
-
-    .placeholder-icon { font-size: 40px; opacity: 0.35; }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-
-    .card-header {
-      padding: 9px 14px;
-      background: var(--surface2);
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
-    }
-
-    .card-body {
-      padding: 12px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
-
-    .value {
-      font-size: 12px;
-      font-family: var(--mono);
-      text-align: right;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 160px;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-    .badge-ok      { background: rgba(61,214,140,0.15); color: var(--green); }
-    .badge-warn    { background: rgba(245,200,66,0.15); color: var(--yellow); }
-    .badge-err     { background: rgba(245,80,75,0.15); color: var(--red); }
-    .badge-neutral { background: var(--surface2); color: var(--text-muted); }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: none;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.15s;
-      width: 100%;
-    }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-phantom { background: #ab9ff2; color: #1a1a2e; }
-    .btn-phantom:hover:not(:disabled) { opacity: 0.85; }
-    .btn-disconnect {
-      background: rgba(245,80,75,0.12);
-      color: var(--red);
-      border: 1px solid rgba(245,80,75,0.25);
-    }
-    .btn-disconnect:hover:not(:disabled) { background: rgba(245,80,75,0.2); }
-
-    .info-box {
-      background: rgba(61, 214, 140, 0.05);
-      border: 1px solid rgba(61, 214, 140, 0.15);
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 12px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    .info-box strong { color: var(--text); }
-
-    code {
-      font-size: 10px;
-      font-family: var(--mono);
-      background: var(--surface2);
-      padding: 1px 4px;
-      border-radius: 3px;
-    }
-
-    .error-msg {
-      font-size: 11px;
-      color: var(--red);
-      display: none;
-    }
-
-    .log-panel {
-      border-top: 1px solid var(--border);
-      background: var(--surface);
-    }
-
-    .log-title {
-      padding: 7px 20px;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.7px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .log-clear { font-size: 11px; background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; }
-    .log-clear:hover { background: var(--surface2); color: var(--text); }
-
-    #log {
-      height: 100px;
-      overflow-y: auto;
-      padding: 6px 20px;
-      font-family: var(--mono);
-      font-size: 11px;
-      line-height: 1.6;
-    }
-
-    .log-line { display: flex; gap: 10px; }
-    .log-ts   { color: var(--text-muted); flex-shrink: 0; }
-    .log-key  { color: var(--green); flex-shrink: 0; }
-    .log-val  { color: var(--text); word-break: break-all; }
-
-    @media (max-width: 800px) {
-      .main { grid-template-columns: 1fr; }
-      .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-<div class="app">
-
-  <header class="header">
-    <span class="header-logo">Cherry Chat</span>
-    <span class="header-badge">wallet-only</span>
-    <span class="header-no-server">no backend</span>
+  <header>
+    <h1>🍒 Cherry Chat</h1>
+    <span class="badge">wallet-only</span>
+    <span class="badge muted">no host backend · no host wallet integration</span>
+    <span class="subtitle">All auth happens inside the iframe.</span>
   </header>
 
-  <div class="main">
+  <main>
+    <section class="panel">
+      <h2>How this example works</h2>
+      <p>
+        This page intentionally has <strong>no</strong> Phantom code, no wallet
+        adapter, no <code>setWalletAddress</code> call. The iframe is mounted
+        with just <code>appId</code>, <code>roomId</code>, and
+        <code>embedUrl</code> from <code>/config.json</code>.
+      </p>
+      <p>
+        When you click <strong>Connect Wallet</strong> inside the chat panel,
+        the iframe drives the entire flow — Phantom popup, signature, Cherry
+        JWT — without round-tripping back to this page.
+      </p>
+      <p>
+        Use this when your site doesn't have a backend (or you don't want to
+        wire Phantom into it) and you want a "drop-in" chat widget.
+      </p>
 
-    <!-- Left panel -->
-    <aside class="panel-left">
+      <h2 style="margin-top:22px">Source</h2>
+      <p>See <code>public/index.html</code> — the entire host integration is
+        ~10 lines below the <code>&lt;style&gt;</code> block.</p>
+    </section>
 
-      <div class="info-box">
-        <strong>authMode: wallet-only</strong><br />
-        No backend server needed. Cherry server issues the challenge directly.
-        Phantom signs it, Cherry verifies the Ed25519 signature and issues a
-        Cherry JWT. The host is just static HTML.
+    <div id="chat-container">
+      <div class="placeholder">
+        <div style="font-size:32px;opacity:0.4">🍒</div>
+        <div>Loading chat…</div>
       </div>
-
-      <!-- App ID card -->
-      <div class="card">
-        <div class="card-header">Configuration</div>
-        <div class="card-body">
-          <div class="row">
-            <span class="label">App ID</span>
-            <!--
-              Replace this with your real APP_ID.
-              Get it from: Cherry Admin Panel -> Embed -> Your App -> Configuration
-              The app must have authMode='wallet-only' set in the Admin Panel.
-            -->
-            <span class="value" id="app-id-display">see HTML source</span>
-          </div>
-          <div class="row">
-            <span class="label">Backend</span>
-            <span class="badge badge-ok">not needed</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Wallet card -->
-      <div class="card">
-        <div class="card-header">Phantom Wallet</div>
-        <div class="card-body">
-          <div class="row">
-            <span class="label">Status</span>
-            <span id="wallet-status"><span class="badge badge-neutral">Not connected</span></span>
-          </div>
-          <div class="row" id="wallet-addr-row" style="display:none">
-            <span class="label">Address</span>
-            <span class="value" id="wallet-addr">—</span>
-          </div>
-          <button class="btn btn-phantom" id="btn-connect" onclick="connectWallet()">
-            Connect Phantom
-          </button>
-          <button class="btn btn-disconnect" id="btn-disconnect" style="display:none" onclick="disconnectWallet()">
-            Disconnect
-          </button>
-          <div class="error-msg" id="wallet-err"></div>
-        </div>
-      </div>
-
-      <!-- Sign challenge card -->
-      <div class="card">
-        <div class="card-header">Sign Challenge</div>
-        <div class="card-body">
-          <div class="row">
-            <span class="label">Status</span>
-            <span id="sign-status"><span class="badge badge-neutral">Waiting</span></span>
-          </div>
-          <p style="font-size:11px;color:var(--text-muted);line-height:1.5">
-            Cherry server sends a challenge. The SDK calls
-            <code>onSignChallenge</code> — Phantom shows a "Sign message?" popup.
-            This is the only wallet interaction in wallet-only mode.
-          </p>
-        </div>
-      </div>
-
-      <!-- SDK events -->
-      <div class="card">
-        <div class="card-header">SDK Events</div>
-        <div class="card-body">
-          <div class="row">
-            <span class="label">ready</span>
-            <span class="badge badge-neutral" id="evt-ready">—</span>
-          </div>
-          <div class="row">
-            <span class="label">authStateChange</span>
-            <span class="badge badge-neutral" id="evt-auth">—</span>
-          </div>
-          <div class="row">
-            <span class="label">unreadCount</span>
-            <span class="badge badge-neutral" id="evt-unread">—</span>
-          </div>
-          <div class="row">
-            <span class="label">tokenExpired</span>
-            <span class="badge badge-neutral" id="evt-expired">—</span>
-          </div>
-          <div class="row">
-            <span class="label">error</span>
-            <span class="badge badge-neutral" id="evt-error">—</span>
-          </div>
-        </div>
-      </div>
-
-    </aside>
-
-    <!-- Right: embedded chat -->
-    <main class="panel-right">
-      <div class="chat-wrapper">
-        <div id="chat-container">
-          <div class="placeholder">
-            <div class="placeholder-icon">&#128172;</div>
-            <p>Connect Phantom to load the embedded chat</p>
-          </div>
-        </div>
-      </div>
-    </main>
-
-  </div><!-- /.main -->
-
-  <div class="log-panel">
-    <div class="log-title">
-      <span>Event Log</span>
-      <button class="log-clear" onclick="clearLog()">Clear</button>
     </div>
-    <div id="log"></div>
-  </div>
+  </main>
 
-</div><!-- /.app -->
+  <script>
+    // ------------------------------------------------------------
+    //  The ENTIRE host integration. That's it.
+    // ------------------------------------------------------------
+    (async () => {
+      const cfg = await fetch('/config.json').then((r) => r.json());
 
-<script>
-// ============================================================
-//  Configuration
-//
-//  APP_ID and CHERRY_EMBED_URL are loaded from the shared root .env
-//  via GET /config.json (served by wallet-only/server.js).
-//  Edit cherry-embed-sdk/example/.env to change them.
-//
-//  The corresponding embed app must have authMode='wallet-only'.
-// ============================================================
-let APP_ID = null;
-let CHERRY_EMBED_URL = null;
-let ROOM_ID = null;
+      // Clear the loading placeholder — the SDK appends its iframe to the
+      // container without removing existing children.
+      document.getElementById('chat-container').innerHTML = '';
 
-async function loadConfig() {
-  const res = await fetch('/config.json');
-  if (!res.ok) throw new Error(`/config.json returned ${res.status}`);
-  const cfg = await res.json();
-  APP_ID = cfg.appId;
-  CHERRY_EMBED_URL = cfg.embedUrl;
-  ROOM_ID = cfg.roomId || null;
-  document.getElementById('app-id-display').textContent = APP_ID;
-  log('config.loaded', { appId: APP_ID, embedUrl: CHERRY_EMBED_URL, roomId: ROOM_ID });
-}
+      const chat = new CherryEmbedSDK.CherryEmbed({
+        appId: cfg.appId,
+        container: '#chat-container',
+        roomId: cfg.roomId || undefined,
+        embedUrl: cfg.embedUrl,
+      });
 
-// ============================================================
-//  Logging
-// ============================================================
-function log(key, val) {
-  const el = document.getElementById('log');
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
-  const valStr = val === undefined ? '' : (typeof val === 'object' ? JSON.stringify(val) : String(val));
-  line.innerHTML =
-    `<span class="log-ts">${ts}</span>` +
-    `<span class="log-key">${esc(key)}</span>` +
-    (valStr ? `<span class="log-val">${esc(valStr)}</span>` : '');
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
+      chat.on('error', (err) => console.error('[chat]', err));
+      chat.on('authStateChange', (ok) =>
+        console.log('[chat] authState =', ok),
+      );
 
-function clearLog() { document.getElementById('log').innerHTML = ''; }
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function setEvt(id, label, cls) {
-  const el = document.getElementById('evt-' + id);
-  if (!el) return;
-  el.textContent = label;
-  el.className = 'badge ' + cls;
-}
-
-// ============================================================
-//  State
-// ============================================================
-let walletProvider = null;
-let walletAddress = null;
-let chat = null;
-
-// ============================================================
-//  Wallet connection
-// ============================================================
-async function connectWallet() {
-  const errEl = document.getElementById('wallet-err');
-  errEl.style.display = 'none';
-
-  if (!APP_ID) {
-    errEl.textContent = 'Config not loaded yet — refresh the page.';
-    errEl.style.display = '';
-    return;
-  }
-
-  const provider = window.phantom?.solana ?? window.solana;
-
-  if (!provider || !provider.isPhantom) {
-    errEl.textContent = 'Phantom wallet not found. Install it at https://phantom.app and refresh.';
-    errEl.style.display = '';
-    log('wallet.error', 'Phantom not found');
-    return;
-  }
-
-  document.getElementById('btn-connect').disabled = true;
-
-  try {
-    const resp = await provider.connect();
-    walletAddress = resp.publicKey.toString();
-    walletProvider = provider;
-
-    document.getElementById('wallet-status').innerHTML =
-      '<span class="badge badge-ok">Connected</span>';
-    document.getElementById('wallet-addr-row').style.display = '';
-    document.getElementById('wallet-addr').textContent =
-      walletAddress.slice(0, 6) + '...' + walletAddress.slice(-4);
-    document.getElementById('btn-connect').style.display = 'none';
-    document.getElementById('btn-disconnect').style.display = '';
-
-    log('wallet.connected', walletAddress);
-
-    await mountChat(walletAddress);
-
-  } catch (err) {
-    errEl.textContent = err.message || String(err);
-    errEl.style.display = '';
-    document.getElementById('btn-connect').disabled = false;
-    log('wallet.error', String(err));
-  }
-}
-
-async function disconnectWallet() {
-  try {
-    if (walletProvider) await walletProvider.disconnect().catch(() => {});
-    walletProvider = null;
-    walletAddress = null;
-
-    if (chat) { chat.destroy(); chat = null; }
-
-    document.getElementById('wallet-status').innerHTML =
-      '<span class="badge badge-neutral">Not connected</span>';
-    document.getElementById('wallet-addr-row').style.display = 'none';
-    document.getElementById('btn-connect').style.display = '';
-    document.getElementById('btn-connect').disabled = false;
-    document.getElementById('btn-disconnect').style.display = 'none';
-    document.getElementById('sign-status').innerHTML =
-      '<span class="badge badge-neutral">Waiting</span>';
-
-    ['ready','auth','unread','expired','error'].forEach(id => setEvt(id,'—','badge-neutral'));
-
-    document.getElementById('chat-container').innerHTML = `
-      <div class="placeholder">
-        <div class="placeholder-icon">&#128172;</div>
-        <p>Connect Phantom to load the embedded chat</p>
-      </div>`;
-
-    log('wallet.disconnected');
-  } catch (err) {
-    log('wallet.disconnect.error', String(err));
-  }
-}
-
-// ============================================================
-//  Mount Cherry Embed — wallet-only mode
-//
-//  Key difference from app-trusted examples:
-//    - NO token: ... property — embedToken is not used
-//    - walletAddress is required so Cherry knows who to challenge
-//    - onSignChallenge is the ONLY auth mechanism
-// ============================================================
-async function mountChat(address) {
-  try {
-    document.getElementById('chat-container').innerHTML = '';
-
-    chat = new CherryEmbedSDK.CherryEmbed({
-      appId: APP_ID,
-      container: '#chat-container',
-      // NO token — wallet-only mode authenticates entirely via signChallenge
-      walletAddress: address,
-      // roomId comes from ROOM_ID in .env. Required by the embed iframe —
-      // without it you get "No room specified".
-      roomId: ROOM_ID || undefined,
-      embedUrl: CHERRY_EMBED_URL,
-    });
-
-    chat.on('ready', () => {
-      setEvt('ready', 'fired', 'badge-ok');
-      log('sdk.ready');
-    });
-
-    chat.on('authStateChange', (ok) => {
-      setEvt('auth', ok ? 'authenticated' : 'signed-out', ok ? 'badge-ok' : 'badge-neutral');
-      log('sdk.authStateChange', ok);
-    });
-
-    chat.on('unreadCount', (n) => {
-      setEvt('unread', String(n), 'badge-ok');
-      log('sdk.unreadCount', n);
-    });
-
-    chat.on('tokenExpired', () => {
-      setEvt('expired', 'expired', 'badge-warn');
-      log('sdk.tokenExpired', 'wallet will re-sign on next challenge');
-    });
-
-    chat.on('error', (err) => {
-      setEvt('error', err.code, 'badge-err');
-      log('sdk.error', err);
-    });
-
-    log('chat.mounting', APP_ID);
-    await chat.mount();
-
-    // Register signChallenge handler after mount() — bridge is ready.
-    //
-    // In wallet-only mode this is the ONLY auth mechanism.
-    // Cherry server issues a challenge, user signs with Phantom.
-    // On token expiry, Cherry will issue a new challenge automatically —
-    // the user signs again (one popup per session refresh).
-    chat.onSignChallenge(async (messageBytes) => {
-      document.getElementById('sign-status').innerHTML =
-        '<span class="badge badge-warn">Signing...</span>';
-      log('signChallenge.received', `${messageBytes.length} bytes`);
-
-      try {
-        // Phantom returns { publicKey, signature: Uint8Array }
-        const result = await walletProvider.signMessage(messageBytes, 'utf8');
-
-        const sigBytes = result.signature instanceof Uint8Array
-          ? result.signature
-          : new Uint8Array(result.signature);
-
-        document.getElementById('sign-status').innerHTML =
-          '<span class="badge badge-ok">Signed</span>';
-        log('signChallenge.signed', `${sigBytes.length} bytes`);
-
-        return sigBytes;
-      } catch (err) {
-        document.getElementById('sign-status').innerHTML =
-          '<span class="badge badge-err">Rejected</span>';
-        log('signChallenge.rejected', err.message || String(err));
-        throw err;
-      }
-    });
-
-    log('chat.mounted');
-    log('signChallenge.handler', 'registered');
-
-  } catch (err) {
-    document.getElementById('chat-container').innerHTML = `
-      <div class="placeholder">
-        <div style="font-size:40px;opacity:0.35">&#9888;</div>
-        <p style="color:var(--red)">${esc(err.message || String(err))}</p>
-      </div>`;
-    log('chat.error', String(err));
-  }
-}
-
-// ============================================================
-//  Init — load config from /config.json, then auto-connect if Phantom was already connected
-// ============================================================
-window.addEventListener('DOMContentLoaded', async () => {
-  log('page.loaded', 'static + /config.json (no auth backend)');
-
-  try {
-    await loadConfig();
-  } catch (err) {
-    const errEl = document.getElementById('wallet-err');
-    errEl.textContent = 'Failed to load /config.json — is the example server running? ' + err.message;
-    errEl.style.display = '';
-    log('config.error', err.message);
-    document.getElementById('btn-connect').disabled = true;
-    return;
-  }
-
-  // If Phantom is already connected from a previous visit, auto-connect
-  const provider = window.phantom?.solana ?? window.solana;
-  if (provider && provider.isConnected) {
-    connectWallet();
-  }
-});
-</script>
+      await chat.mount();
+    })();
+  </script>
 </body>
 </html>

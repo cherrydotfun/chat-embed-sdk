@@ -39,9 +39,17 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-// Accept both short and CHERRY_-prefixed names for backwards compat with older .env files
-const APP_ID = process.env.APP_ID || process.env.CHERRY_APP_ID || '';
-const APP_SECRET = process.env.APP_SECRET || process.env.CHERRY_APP_SECRET || '';
+// Prefer a dedicated env var so the three examples can share a single .env.
+const APP_ID =
+  process.env.APP_WALLET_ID ||
+  process.env.APP_ID ||
+  process.env.CHERRY_APP_ID ||
+  '';
+const APP_SECRET =
+  process.env.APP_WALLET_SECRET ||
+  process.env.APP_SECRET ||
+  process.env.CHERRY_APP_SECRET ||
+  '';
 const CHERRY_EMBED_URL = process.env.CHERRY_EMBED_URL || 'https://embed.cherry.fun';
 const ROOM_ID = process.env.ROOM_ID || process.env.CHERRY_ROOM_ID || '';
 const PORT = parseInt(process.env.PORT || '3000', 10);
