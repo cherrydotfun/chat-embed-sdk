@@ -1,5 +1,5 @@
 {
-  "name": "@cherrydotfun/embed-sdk",
+  "name": "@cherrydotfun/chat-embed-sdk",
   "version": "0.1.1",
   "description": "Embed Cherry Chat public rooms into any website. Zero-signature auth, full theming, lightweight iframe-based.",
   "license": "MIT",
@@ -41,7 +41,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicefun/cherry-embed-sdk"
+    "url": "https://github.com/nicefun/chat-embed-sdk"
   },
   "homepage": "https://cherry.fun",
   "devDependencies": {

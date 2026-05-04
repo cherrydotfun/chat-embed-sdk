@@ -33,21 +33,21 @@ Three self-contained examples, one for each Cherry Embed `authMode`.
 ### 1. Install dependencies (shared, run once)
 
 ```bash
-cd cherry-embed-sdk/example
+cd chat-embed-sdk/example
 npm install
 ```
 
 ### 2. Build the SDK (if not already built)
 
 ```bash
-cd cherry-embed-sdk
+cd chat-embed-sdk
 npm run build
 ```
 
 ### 3. Configure
 
 ```bash
-cd cherry-embed-sdk/example
+cd chat-embed-sdk/example
 cp .env.example .env
 # Edit .env: fill in APP_ID and APP_SECRET from Cherry Admin Panel
 ```
@@ -125,5 +125,5 @@ Key variables:
 
 ## Support
 
-- **SDK README:** [`cherry-embed-sdk/README.md`](../README.md)
+- **SDK README:** [`chat-embed-sdk/README.md`](../README.md)
 - **Cherry Docs:** https://cherry.fun/docs/embed

@@ -1,6 +1,6 @@
 ---
 name: cherry-embed-integration
-description: "Use when embedding Cherry Chat into a web app with @cherrydotfun/embed-sdk. Covers the three supported auth modes, backend token generation, wallet challenge signing, theming, events, and verification."
+description: "Use when embedding Cherry Chat into a web app with @cherrydotfun/chat-embed-sdk. Covers the three supported auth modes, backend token generation, wallet challenge signing, theming, events, and verification."
 ---
 
 # Cherry Embed SDK Integration
@@ -24,15 +24,15 @@ Ask only for missing operational values:
 ## Install
 
 ```bash
-npm install @cherrydotfun/embed-sdk
+npm install @cherrydotfun/chat-embed-sdk
 ```
 
 Respect the host package manager:
 
 ```bash
-yarn add @cherrydotfun/embed-sdk
-pnpm add @cherrydotfun/embed-sdk
-bun add @cherrydotfun/embed-sdk
+yarn add @cherrydotfun/chat-embed-sdk
+pnpm add @cherrydotfun/chat-embed-sdk
+bun add @cherrydotfun/chat-embed-sdk
 ```
 
 For plain HTML without bundling, use the published CDN script if the project already uses script tags:
@@ -77,7 +77,7 @@ app.get('/api/cherry/embed-token', requireAuth, (req, res) => {
 ```
 
 ```ts
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 const { token } = await fetch('/api/cherry/embed-token').then((res) => res.json());
 
@@ -102,7 +102,7 @@ chat.on('tokenExpired', async () => {
 Use when Cherry must trust both the host backend token and the user's live wallet signature. This mode has an important lifecycle rule: pass `walletAddress` and `signChallengeHandler` in the `CherryEmbed` constructor before `mount()`. Initial auth commands can trigger `signChallenge` immediately after the iframe bridge becomes ready.
 
 ```ts
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 const { token } = await fetch('/api/cherry/embed-token').then((res) => res.json());
 
@@ -140,7 +140,7 @@ That can race with the iframe's first `signChallenge` request.
 Use when the host does not have a Cherry app secret backend, or when the embed should manage wallet UX inside the iframe. No token endpoint is required.
 
 ```ts
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 const chat = new CherryEmbed({
   appId: 'app_xxx',
@@ -223,7 +223,7 @@ return () => {
 
 ## Verification
 
-For SDK changes inside `cherry-embed-sdk`, run:
+For SDK changes inside `chat-embed-sdk`, run:
 
 ```bash
 npm run typecheck

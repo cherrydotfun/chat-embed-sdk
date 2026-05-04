@@ -52,7 +52,7 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---- Serve the embed SDK IIFE bundle ----
-// The bundle is built into cherry-embed-sdk/dist/index.global.js
+// The bundle is built into chat-embed-sdk/dist/index.global.js
 app.get('/cherry-embed.js', (req, res) => {
   res.sendFile(path.join(__dirname, '..', '..', 'dist', 'index.global.js'));
 });

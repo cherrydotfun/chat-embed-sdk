@@ -65,7 +65,7 @@ Two independent proofs:
 ### 1. Install dependencies (once from the root example/ folder)
 
 ```bash
-cd cherry-embed-sdk/example
+cd chat-embed-sdk/example
 npm install
 ```
 
@@ -79,14 +79,14 @@ cp .env.example .env
 ### 3. Build the SDK (if not already built)
 
 ```bash
-cd cherry-embed-sdk
+cd chat-embed-sdk
 npm run build
 ```
 
 ### 4. Start the server
 
 ```bash
-cd cherry-embed-sdk/example
+cd chat-embed-sdk/example
 npm run "start:app-trusted+wallet"
 # or: node "app-trusted+wallet/server.js"
 ```

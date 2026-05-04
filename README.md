@@ -1,11 +1,11 @@
-# @cherrydotfun/embed-sdk
+# @cherrydotfun/chat-embed-sdk
 
 Embed Cherry Chat rooms into any website with flexible authentication modes and full theming support. Choose the authentication model that best fits your infrastructure: app-trusted (zero signatures), app-trusted with wallet verification, or wallet-only (no backend required).
 
 ## Install
 
 ```bash
-npm install @cherrydotfun/embed-sdk
+npm install @cherrydotfun/chat-embed-sdk
 ```
 
 Or via CDN:
@@ -65,7 +65,7 @@ app.get('/api/embed-token', (req, res) => {
 **Frontend:**
 
 ```typescript
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 async function initChat() {
   // Fetch token from your backend
@@ -124,7 +124,7 @@ app.get('/api/embed-proof', (req, res) => {
 **Frontend (with Phantom wallet):**
 
 ```typescript
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 async function initChatWithWallet() {
   // Get app proof from your backend
@@ -169,7 +169,7 @@ No backend required. User signs a challenge directly with their wallet. Minimal 
 **Frontend:**
 
 ```typescript
-import { CherryEmbed } from '@cherrydotfun/embed-sdk';
+import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 async function initChatWalletOnly() {
   const chat = new CherryEmbed({
@@ -218,14 +218,14 @@ The SDK handles:
 
 ### Solana Wallet-Adapter Integration
 
-For Solana ecosystem wallets (Phantom, Solflare, Backpack, etc.), use the optional `@cherry/embed-sdk-solana` package:
+For Solana ecosystem wallets (Phantom, Solflare, Backpack, etc.), use the optional `@cherry/chat-embed-sdk-solana` package:
 
 ```bash
-npm install @cherry/embed-sdk-solana
+npm install @cherry/chat-embed-sdk-solana
 ```
 
 ```typescript
-import { useCherryEmbed } from '@cherry/embed-sdk-solana';
+import { useCherryEmbed } from '@cherry/chat-embed-sdk-solana';
 import { useWallet } from '@solana/wallet-adapter-react';
 
 export function ChatWidget() {
@@ -242,7 +242,7 @@ export function ChatWidget() {
 }
 ```
 
-See [`@cherry/embed-sdk-solana` README](../cherry-embed-sdk-solana/README.md) for full details.
+See [`@cherry/chat-embed-sdk-solana` README](../chat-embed-sdk-solana/README.md) for full details.
 
 ---
 
@@ -607,7 +607,7 @@ If you want to remove your backend dependency:
 ## Examples
 
 See complete working examples:
-- [`cherry-embed-sdk/example/`](./example/) — Zero-signature example (Express + Phantom)
+- [`chat-embed-sdk/example/`](./example/) — Zero-signature example (Express + Phantom)
 - [GitHub recipes](https://github.com/cherrydotfun/embed-examples/) — Next.js, React, Vue, vanilla JS
 
 ---
@@ -620,7 +620,7 @@ See complete working examples:
    
    document.getElementById('chat-btn').addEventListener('click', async () => {
      if (!chat) {
-       const { CherryEmbed } = await import('@cherrydotfun/embed-sdk');
+       const { CherryEmbed } = await import('@cherrydotfun/chat-embed-sdk');
        chat = new CherryEmbed({ ... });
        await chat.mount();
      }
@@ -654,7 +654,7 @@ See complete working examples:
 ## Support
 
 - **Documentation:** https://cherry.fun/docs/embed
-- **GitHub Issues:** https://github.com/cherrydotfun/embed-sdk/issues
+- **GitHub Issues:** https://github.com/cherrydotfun/chat-embed-sdk/issues
 - **Discord:** https://discord.gg/cherry
 
 ---

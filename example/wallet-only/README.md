@@ -49,7 +49,7 @@ No host backend is involved at any point. Cherry controls the entire auth flow.
 ## How to run
 
 ```bash
-cd cherry-embed-sdk/example
+cd chat-embed-sdk/example
 cp .env.example .env   # fill in APP_ID (and optionally CHERRY_EMBED_URL)
 npm install
 npm run start:wallet-only
@@ -60,7 +60,7 @@ Open http://localhost:3000
 ## Configuration
 
 `APP_ID` and `CHERRY_EMBED_URL` are read from the **shared root `.env`**
-(`cherry-embed-sdk/example/.env`) — same file that `app-trusted` and
+(`chat-embed-sdk/example/.env`) — same file that `app-trusted` and
 `app-trusted+wallet` examples use.
 
 ```ini

@@ -1,6 +1,6 @@
 # Cherry Embed SDK Skills
 
-AI-powered integration assistant for `@cherrydotfun/embed-sdk`.
+AI-powered integration assistant for `@cherrydotfun/chat-embed-sdk`.
 
 ## Available Skills
 
@@ -21,16 +21,16 @@ The skill:
 
 ```bash
 # Copy skill to global skills directory
-cp -r node_modules/@cherrydotfun/embed-sdk/skills/cherry-embed-integration ~/.claude/skills/
+cp -r node_modules/@cherrydotfun/chat-embed-sdk/skills/cherry-embed-integration ~/.claude/skills/
 
 # Or symlink (updates with package)
-ln -s $(pwd)/node_modules/@cherrydotfun/embed-sdk/skills/cherry-embed-integration ~/.claude/skills/cherry-embed-integration
+ln -s $(pwd)/node_modules/@cherrydotfun/chat-embed-sdk/skills/cherry-embed-integration ~/.claude/skills/cherry-embed-integration
 ```
 
 ### Codex
 
 ```bash
-cp -r node_modules/@cherrydotfun/embed-sdk/skills/cherry-embed-integration ~/.agents/skills/
+cp -r node_modules/@cherrydotfun/chat-embed-sdk/skills/cherry-embed-integration ~/.agents/skills/
 ```
 
 ### Project-Level (CLAUDE.md)
@@ -40,7 +40,7 @@ Add to your project's `CLAUDE.md`:
 ```markdown
 ## Skills
 
-- Cherry Embed Integration: `node_modules/@cherrydotfun/embed-sdk/skills/cherry-embed-integration/SKILL.md`
+- Cherry Embed Integration: `node_modules/@cherrydotfun/chat-embed-sdk/skills/cherry-embed-integration/SKILL.md`
 ```
 
 ## Usage
@@ -51,6 +51,6 @@ In Claude Code or Codex, say:
 
 or
 
-> "Integrate @cherrydotfun/embed-sdk"
+> "Integrate @cherrydotfun/chat-embed-sdk"
 
 The skill will activate and guide you through each step.
