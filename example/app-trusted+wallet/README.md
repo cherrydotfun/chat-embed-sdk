@@ -120,12 +120,21 @@ Open http://localhost:3000 and click "Connect Phantom".
 ## Key SDK pattern
 
 ```js
-// After mount(), register the wallet sign handler.
-// Phantom returns { signature: Uint8Array } from signMessage().
-chat.onSignChallenge(async (messageBytes) => {
-  const result = await window.phantom.solana.signMessage(messageBytes, 'utf8');
-  return result.signature; // Uint8Array, 64 bytes (Ed25519)
+const chat = new CherryEmbedSDK.CherryEmbed({
+  appId: APP_ID,
+  container: '#chat-container',
+  token: embedToken,
+  walletAddress,
+  roomId: ROOM_ID,
+  embedUrl: CHERRY_EMBED_URL,
+  // Register during construction, before initial auth commands are sent.
+  signChallengeHandler: async (messageBytes) => {
+    const result = await window.phantom.solana.signMessage(messageBytes, 'utf8');
+    return result.signature; // Uint8Array, 64 bytes (Ed25519)
+  },
 });
+
+await chat.mount();
 ```
 
 The SDK handles all base64 encoding/decoding between the iframe and the handler.

@@ -26,7 +26,7 @@ Cherry Embed provides three authentication modes to support different hosting sc
 
 All modes support:
 - Full read/write access to configured rooms
-- E2E encryption for direct messages (except walletless)
+- Public group-room embed flows (the iframe app does not expose encrypted DMs)
 - Real-time messaging via WebSocket
 - Theming and layout customization
 - Event hooks for integration
@@ -135,19 +135,17 @@ async function initChatWithWallet() {
     appId: 'your-app-id',
     container: '#chat',
     walletAddress, // Pass wallet address for the UI
-  });
-  
-  // Register wallet signer (Phantom example)
-  chat.onSignChallenge(async (message) => {
-    const provider = window.phantom?.solana;
-    if (!provider?.isConnected) throw new Error('Wallet not connected');
-    
-    const { signature } = await provider.signMessage(message, 'utf8');
-    return signature; // Return signature bytes
+    signChallengeHandler: async (message) => {
+      const provider = window.phantom?.solana;
+      if (!provider?.isConnected) throw new Error('Wallet not connected');
+
+      const { signature } = await provider.signMessage(message, 'utf8');
+      return signature; // Return signature bytes
+    },
   });
   
   await chat.mount();
-  
+
   // After mount, send app proof to initiate authentication
   chat.setToken(appProof);
 }
@@ -178,20 +176,7 @@ async function initChatWalletOnly() {
     appId: 'your-public-app-id',
     container: '#chat',
   });
-  
-  // Request wallet address from user
-  const walletAddress = await getUserWalletAddress(); // Your UX
-  chat.setWalletAddress(walletAddress);
-  
-  // Register wallet signer
-  chat.onSignChallenge(async (message) => {
-    const provider = window.phantom?.solana;
-    if (!provider?.isConnected) throw new Error('Wallet not connected');
-    
-    const { signature } = await provider.signMessage(message, 'utf8');
-    return signature;
-  });
-  
+
   await chat.mount();
 }
 ```
@@ -220,6 +205,10 @@ chat.onSignChallenge(
   }
 );
 ```
+
+For auth flows that pass `token` and `walletAddress` at construction time,
+prefer `signChallengeHandler` in the constructor so the handler is registered
+before initial auth commands are sent to the iframe.
 
 The SDK handles:
 - Challenge generation via server
@@ -304,6 +293,7 @@ const chat = new CherryEmbed(config: CherryEmbedConfig)
 | `position` | `'inline' \| 'floating-right' \| 'floating-left'` | No | Widget position (default: `inline`) |
 | `collapsed` | `boolean` | No | Start minimized |
 | `embedUrl` | `string` | No | Override embed iframe URL |
+| `signChallengeHandler` | `(message: Uint8Array) => Promise<Uint8Array>` | No | Wallet signer registered before initial auth commands |
 
 ### Methods
 
@@ -313,7 +303,7 @@ await chat.mount()              // Initialize iframe and connect
 chat.destroy()                  // Cleanup and remove iframe
 
 // Authentication (wallet-signature modes)
-chat.onSignChallenge(handler)   // Register challenge signer
+chat.onSignChallenge(handler)   // Register/update challenge signer after mount
 chat.offSignChallenge()         // Unregister signer
 chat.setWalletAddress(address)  // Set/update wallet address
 
@@ -452,16 +442,16 @@ For advanced integration, the SDK communicates with the iframe via postMessage. 
 // Iframe requests wallet signature (wallet-signature modes)
 { 
   type: 'cherry:request',
-  requestId: '...',
-  command: 'signChallenge',
-  data: { message: '<base64>' } // message bytes encoded as base64
+  id: '...',
+  method: 'signChallenge',
+  params: { message: '<base64>' } // message bytes encoded as base64
 }
 
 // Host responds with signature
 {
   type: 'cherry:response',
-  requestId: '...',
-  data: { signature: '<base64>' } // signature bytes encoded as base64
+  id: '...',
+  result: { signature: '<base64>' } // signature bytes encoded as base64
 }
 ```
 
@@ -579,11 +569,18 @@ If you already have an app with `app-trusted` mode and want to add wallet proof:
      { expiresIn: '5m', jwtid: crypto.randomUUID() }
    );
    ```
-4. **Update frontend** to register wallet signer before setToken:
+4. **Update frontend** to register wallet signer before auth starts:
    ```typescript
-   chat.onSignChallenge(async (msg) => {
-     return await wallet.signMessage(msg);
+   const chat = new CherryEmbed({
+     appId,
+     container: '#chat',
+     walletAddress: wallet,
+     signChallengeHandler: async (msg) => {
+       return await walletAdapter.signMessage(msg);
+     },
    });
+
+   await chat.mount();
    chat.setToken(appProof); // Now appProof instead of embedToken
    ```
 

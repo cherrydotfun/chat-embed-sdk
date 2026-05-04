@@ -1,6 +1,12 @@
 import { EmbedBridge, base64ToBytes, bytesToBase64 } from './bridge';
 import { createEmbedIframe, getEmbedOrigin } from './iframe';
-import type { CherryEmbedConfig, EmbedEventMap, EmbedLayout, EmbedTheme } from './types';
+import type {
+  CherryEmbedConfig,
+  EmbedEventMap,
+  EmbedLayout,
+  EmbedTheme,
+  SignChallengeHandler,
+} from './types';
 import { isSignChallengeRequest } from './types';
 
 type EventCallback<K extends keyof EmbedEventMap> = EmbedEventMap[K] extends void
@@ -23,8 +29,6 @@ type EventCallback<K extends keyof EmbedEventMap> = EmbedEventMap[K] extends voi
  * });
  * ```
  */
-export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
-
 export class CherryEmbed {
   private readonly config: CherryEmbedConfig;
   private containerEl: HTMLElement | null = null;
@@ -37,12 +41,14 @@ export class CherryEmbed {
 
   /** Current wallet address (may be set before or after mount). */
   private _walletAddress: string | undefined;
+  private signChallengeHandler: SignChallengeHandler | undefined;
 
   constructor(config: CherryEmbedConfig) {
     if (!config.appId) throw new Error('CherryEmbed: appId is required');
     if (!config.container) throw new Error('CherryEmbed: container is required');
     this.config = config;
     this._walletAddress = config.walletAddress;
+    this.signChallengeHandler = config.signChallengeHandler;
   }
 
   async mount(): Promise<void> {
@@ -65,6 +71,9 @@ export class CherryEmbed {
     // 3. Create bridge
     const origin = getEmbedOrigin(this.config.embedUrl);
     this.bridge = new EmbedBridge(this.iframe, origin);
+    if (this.signChallengeHandler) {
+      this.registerSignChallengeHandler(this.bridge, this.signChallengeHandler);
+    }
 
     // 4. Setup event forwarding before waiting for ready
     this.setupEventForwarding();
@@ -164,11 +173,9 @@ export class CherryEmbed {
   /**
    * Inform the iframe of the currently connected wallet address.
    *
-   * This is useful in two cases:
-   * 1. The host knows the wallet address before the iframe needs to start a
-   *    `signChallenge` flow (so the iframe can display the address early).
-   * 2. "Walletless" integration where the host wants to supply an opaque
-   *    stable identifier instead of a Solana public key.
+   * This is useful when the host knows the wallet address before the iframe
+   * needs to start a `signChallenge` flow, so the iframe can display the
+   * address early.
    *
    * Call this after `mount()` or pass `walletAddress` in the constructor
    * config to have it sent automatically when the iframe is ready.
@@ -210,9 +217,11 @@ export class CherryEmbed {
    * ```
    */
   onSignChallenge(handler: SignChallengeHandler): void {
+    this.signChallengeHandler = handler;
+    (this.config as { signChallengeHandler?: SignChallengeHandler }).signChallengeHandler = handler;
     if (!this.bridge) {
       throw new Error(
-        'CherryEmbed: call onSignChallenge() after mount() or pass the handler before mount() — ' +
+        'CherryEmbed: call onSignChallenge() after mount() or pass signChallengeHandler in the constructor — ' +
         'the bridge is not yet initialised.',
       );
     }

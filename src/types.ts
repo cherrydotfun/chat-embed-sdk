@@ -24,6 +24,8 @@ export interface EmbedLayout {
   maxHeight?: string;
 }
 
+export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
+
 export interface CherryEmbedConfig {
   appId: string;
   container: HTMLElement | string;
@@ -37,6 +39,11 @@ export interface CherryEmbedConfig {
   position?: 'inline' | 'floating-right' | 'floating-left';
   collapsed?: boolean;
   embedUrl?: string;
+  /**
+   * Optional wallet signing callback registered during mount before initial
+   * token / walletAddress commands are sent to the iframe.
+   */
+  signChallengeHandler?: SignChallengeHandler;
 }
 
 export type EmbedEventMap = {

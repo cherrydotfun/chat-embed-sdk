@@ -91,7 +91,7 @@ build time instead of fetching `/config.json`.
 ## Files
 
 - `server.js` — minimal Express: static + `GET /config.json`
-- `public/index.html` — Phantom integration + `onSignChallenge`
+- `public/index.html` — minimal host page; the iframe handles wallet connect/signing
 
 ## Limitations compared to app-trusted modes
 
@@ -108,15 +108,9 @@ chat = new CherryEmbedSDK.CherryEmbed({
   appId: APP_ID,
   container: '#chat-container',
   // NO token property — wallet-only mode has no embedToken
-  walletAddress: walletAddress,   // the connected wallet
+  // NO walletAddress property — the iframe drives wallet connect/signing itself
   embedUrl: CHERRY_EMBED_URL,
 });
 
 await chat.mount();
-
-// Register the sign handler AFTER mount() — bridge must be ready
-chat.onSignChallenge(async (messageBytes) => {
-  const result = await window.phantom.solana.signMessage(messageBytes, 'utf8');
-  return result.signature;  // Uint8Array, 64 bytes
-});
 ```

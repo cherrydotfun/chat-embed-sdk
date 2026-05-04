@@ -625,6 +625,35 @@ async function mountChatWithWallet(address) {
       // without it you get "No room specified".
       roomId: appConfig.roomId || undefined,
       embedUrl: appConfig.embedUrl,
+      // Register during construction so the handler is installed before the
+      // iframe receives the initial token/walletAddress commands.
+      signChallengeHandler: async (messageBytes) => {
+        document.getElementById('sign-status').innerHTML =
+          '<span class="badge badge-warn">Signing...</span>';
+        log('signChallenge.received', `${messageBytes.length} bytes`);
+
+        try {
+          // Phantom: signMessage(Uint8Array, encoding)
+          // Returns { publicKey: PublicKey, signature: Uint8Array }
+          const result = await walletProvider.signMessage(messageBytes, 'utf8');
+
+          // result.signature is Uint8Array (Ed25519 signature, 64 bytes)
+          const sigBytes = result.signature instanceof Uint8Array
+            ? result.signature
+            : new Uint8Array(result.signature);
+
+          document.getElementById('sign-status').innerHTML =
+            '<span class="badge badge-ok">Signed</span>';
+          log('signChallenge.signed', `${sigBytes.length} bytes`);
+
+          return sigBytes;
+        } catch (err) {
+          document.getElementById('sign-status').innerHTML =
+            '<span class="badge badge-err">Rejected</span>';
+          log('signChallenge.rejected', err.message || String(err));
+          throw err;
+        }
+      },
     });
 
     chat.on('ready', () => {
@@ -654,43 +683,8 @@ async function mountChatWithWallet(address) {
 
     log('chat.mounting', appConfig.appId);
     await chat.mount();
-
-    // Register the signChallenge handler AFTER mount() — the bridge is ready.
-    // The Cherry server will call this when it needs proof of wallet ownership.
-    //
-    // Phantom's signMessage returns { publicKey, signature } where signature
-    // is a Uint8Array. We return only the signature bytes; the SDK handles
-    // base64 encoding back to the iframe.
-    chat.onSignChallenge(async (messageBytes) => {
-      document.getElementById('sign-status').innerHTML =
-        '<span class="badge badge-warn">Signing...</span>';
-      log('signChallenge.received', `${messageBytes.length} bytes`);
-
-      try {
-        // Phantom: signMessage(Uint8Array, encoding)
-        // Returns { publicKey: PublicKey, signature: Uint8Array }
-        const result = await walletProvider.signMessage(messageBytes, 'utf8');
-
-        // result.signature is Uint8Array (Ed25519 signature, 64 bytes)
-        const sigBytes = result.signature instanceof Uint8Array
-          ? result.signature
-          : new Uint8Array(result.signature);
-
-        document.getElementById('sign-status').innerHTML =
-          '<span class="badge badge-ok">Signed</span>';
-        log('signChallenge.signed', `${sigBytes.length} bytes`);
-
-        return sigBytes;
-      } catch (err) {
-        document.getElementById('sign-status').innerHTML =
-          '<span class="badge badge-err">Rejected</span>';
-        log('signChallenge.rejected', err.message || String(err));
-        throw err;
-      }
-    });
-
     log('chat.mounted');
-    log('signChallenge.handler', 'registered — waiting for Cherry challenge');
+    log('signChallenge.handler', 'registered before mount — waiting for Cherry challenge');
 
   } catch (err) {
     document.getElementById('chat-container').innerHTML = `

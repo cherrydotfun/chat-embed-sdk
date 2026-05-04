@@ -1,10 +1,10 @@
 export { CherryEmbed } from './embed';
-export type { SignChallengeHandler } from './embed';
 export type {
   CherryEmbedConfig,
   EmbedTheme,
   EmbedLayout,
   EmbedEventMap,
+  SignChallengeHandler,
   BridgeMessage,
   BridgeCommand,
   BridgeEvent,

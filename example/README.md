@@ -88,8 +88,8 @@ npm run start:wallet-only
 ## When to choose which mode
 
 **app-trusted** — you already have authenticated users (your own OAuth/session)
-and want to embed Cherry chat without requiring a Solana wallet. Or your users
-are walletless.
+and want to embed Cherry chat without requiring an additional wallet signature.
+The embed token `sub` must still be a valid Solana public key.
 
 **app-trusted+wallet** — your users have Solana wallets and you want the
 strongest security: the host backend proves the app is legitimate (appSecret),

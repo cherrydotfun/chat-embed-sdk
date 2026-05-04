@@ -11,9 +11,11 @@ anything with a wallet.
 
 Best for:
 - Internal dashboards and partner integrations where you control both sides
-- Walletless users (assert any stable ID, not necessarily a Solana public key)
 - Migration from email/password auth to Cherry chat
 - Use cases where wallet popups are unacceptable UX
+
+Cherry currently requires `sub` in the embed token to be a valid Solana public
+key. Do not use opaque user IDs or email IDs in `sub`.
 
 ## Auth flow
 
