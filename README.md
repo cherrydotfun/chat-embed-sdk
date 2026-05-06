@@ -2,6 +2,14 @@
 
 Embed Cherry Chat rooms into any website with flexible authentication modes and full theming support. Choose the authentication model that best fits your infrastructure: app-trusted (zero signatures), app-trusted with wallet verification, or wallet-only (no backend required).
 
+## Live Demo
+
+Try it: **[cherry.fun/chat-embed-example](https://cherry.fun/chat-embed-example/)** — the wallet-only example with theme presets, display modes (inline / floating / resizable), and a live theme editor, all embedded into a real Cherry chat room.
+
+![Cherry Embed wallet-only demo — theme editor on the left, live chat on the right](docs/demo.png)
+
+For full integration docs, app registration, and admin tooling, see **[cherry.fun](https://cherry.fun)**.
+
 ## Install
 
 ```bash

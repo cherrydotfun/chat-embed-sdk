@@ -152,6 +152,9 @@ button {
   height: 56px;
   border-radius: 9999px;
   border: 0;
+  /* Background + colour are also set inline from React based on the
+   * effective theme so the launcher follows the active palette. The CSS
+   * gradient is the fallback when no theme is applied. */
   background: linear-gradient(135deg, #ff1493 0%, #c026d3 100%);
   color: #fff;
   font-size: 24px;
@@ -172,6 +175,56 @@ button {
   transform: translateY(-2px) scale(1.04);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42),
               0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+/* Closed state runs an attention-grab loop — short wiggle + an outward
+ * ring pulse every 5s. Only fires when the chat is closed; once the
+ * user has opened it once we don't want the dialog's close button to
+ * keep dancing.
+ *
+ * `--launcher-pulse` is set inline by React (= active theme primary)
+ * so the halo picks up the palette. We also wrap the keyframes in a
+ * `@media (prefers-reduced-motion)` opt-out so users with
+ * vestibular-motion sensitivity don't get the bounce.
+ */
+.demo-chat-launcher:not(.demo-chat-launcher-open) {
+  animation: demoChatLauncherAttention 4.8s ease-in-out infinite;
+}
+
+@keyframes demoChatLauncherAttention {
+  /* Quiet for the first 70% — gives the eye a rest between bursts. */
+  0%, 70%, 100% {
+    transform: translateY(0) scale(1) rotate(0deg);
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.35),
+      0 0 0 0 rgba(var(--launcher-pulse-rgb, 255, 20, 147), 0);
+  }
+  /* The "look at me" burst: small wiggle + ring expand. */
+  78% {
+    transform: translateY(-2px) scale(1.05) rotate(-6deg);
+  }
+  82% {
+    transform: translateY(-2px) scale(1.05) rotate(6deg);
+  }
+  86% {
+    transform: translateY(-2px) scale(1.05) rotate(-3deg);
+  }
+  90% {
+    transform: translateY(0) scale(1.04) rotate(0deg);
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.35),
+      0 0 0 12px var(--launcher-pulse, rgba(255, 20, 147, 0.0));
+    /* The ring's alpha lives in the colour itself when --launcher-pulse
+     * is a hex/rgb literal — keyframe animation can't drive `0 → 0.x`
+     * alpha cleanly across browsers, so we settle for a brief solid
+     * tinted ring at the burst peak. */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-chat-launcher:not(.demo-chat-launcher-open) {
+    animation: none;
+  }
 }
 
 /* When the chat is open, lift the close button ABOVE the iframe top
@@ -268,6 +321,38 @@ button {
   color: var(--accent);
   font-weight: 600;
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Pill-shaped GitHub link in the top-right of the marketing eyebrow row.
+ * Resets typography from the eyebrow's tight uppercase tracking so it
+ * reads as a button/link, not a header continuation. */
+.marketing-eyebrow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  text-decoration: none;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.marketing-eyebrow-link:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+}
+.marketing-eyebrow-link svg {
+  flex-shrink: 0;
 }
 .marketing-title {
   font-size: 26px;
@@ -388,6 +473,16 @@ button {
   border-radius: 0;
   font-size: inherit;
   color: inherit;
+}
+
+/* Caption line under the integration snippet pointing at the canonical
+ * source on GitHub. Visible only when the user has expanded <details>,
+ * so it surfaces exactly when they're inspecting integration code. */
+.marketing-snippet-source {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
 }
 
 /* ── Section header (shared by switcher + editor) ────────────────────── */

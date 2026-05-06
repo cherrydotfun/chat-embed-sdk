@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DemoConfig, DisplayMode, EmbedTheme } from '../types';
 import { getSdk, type ChatHandle } from '../cherryGlobal';
 
@@ -116,6 +116,31 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
     setFloatingOpen((o) => !o);
   }, []);
 
+  /**
+   * The launcher's background tracks the active theme so it always
+   * "belongs" to the palette behind it. Priority:
+   *   1. an explicit own-bubble fill (solid colour the user picked),
+   *   2. the primary→accent gradient the bubbles use by default,
+   *   3. fallback to Cherry's pink→purple gradient (CSS default).
+   * The closed-state pulse uses the primary as its halo colour so the
+   * ring picks up the same hue.
+   */
+  const launcherStyle = useMemo<React.CSSProperties>(() => {
+    if (displayMode !== 'floating') return {};
+    const style: React.CSSProperties & Record<string, string> = {};
+    if (theme.ownBubbleColor) {
+      style.background = theme.ownBubbleColor;
+    } else if (theme.primaryColor && theme.accentColor) {
+      style.background = `linear-gradient(135deg, ${theme.primaryColor} 0%, ${theme.accentColor} 100%)`;
+    }
+    if (theme.ownBubbleTextColor) style.color = theme.ownBubbleTextColor;
+    if (theme.primaryColor) {
+      // Custom property consumed by the keyframes for the attention pulse.
+      style['--launcher-pulse'] = theme.primaryColor;
+    }
+    return style;
+  }, [displayMode, theme.ownBubbleColor, theme.ownBubbleTextColor, theme.primaryColor, theme.accentColor]);
+
   return (
     <>
       <div
@@ -129,6 +154,7 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
             className={`demo-chat-launcher${floatingOpen ? ' demo-chat-launcher-open' : ''}`}
             onClick={toggleFloating}
             aria-label={floatingOpen ? 'Close chat' : 'Open chat'}
+            style={launcherStyle}
           >
             {floatingOpen ? '×' : '💬'}
           </button>

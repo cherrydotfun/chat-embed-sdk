@@ -45,7 +45,22 @@ export default function App() {
   // applying the next setTheme — preset switches and the Reset button
   // both bump it. Per-field edits do not.
   const [resetTrigger, setResetTrigger] = useState(0);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>('inline');
+  /**
+   * On phone-width viewports the inline mount eats the entire screen
+   * with no breathing room for the marketing/editor pane on the left
+   * — the floating launcher is the only mount that gracefully co-
+   * exists with the rest of the demo on narrow widths. Default to it
+   * so mobile visitors immediately see the bubble pop-in animation
+   * instead of a fullscreen chat that looks like the demo broke.
+   *
+   * Read once at mount via lazy initial state so SSR / first paint
+   * stays consistent with the chosen mode (no flash from inline →
+   * floating after hydration).
+   */
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
+    if (typeof window === 'undefined') return 'inline';
+    return window.matchMedia('(max-width: 768px)').matches ? 'floating' : 'inline';
+  });
 
   /**
    * Tracks the last overrides snapshot we considered "settled" — once a
