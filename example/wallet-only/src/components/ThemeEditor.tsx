@@ -7,6 +7,10 @@ interface ThemeEditorProps {
   hasOverrides: boolean;
   onFieldChange: <K extends keyof EmbedTheme>(field: K, value: EmbedTheme[K] | undefined) => void;
   onResetOverrides: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 /**
@@ -129,7 +133,15 @@ export function ThemeEditor({
   hasOverrides,
   onFieldChange,
   onResetOverrides,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
 }: ThemeEditorProps) {
+  // Show the platform's accelerator label in the tooltip — Cmd on
+  // Apple, Ctrl elsewhere — so the hint reads natively.
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const mod = isMac ? '⌘' : 'Ctrl';
   // Helper so the callsites below stay readable. Casts `field` back to
   // keyof EmbedTheme inside the onChange so the parent handler stays
   // strongly typed — only the field/value pair flowing through ColorField
@@ -168,14 +180,36 @@ export function ThemeEditor({
   // …any other key shown below
 })`}</code>
         </pre>
-        <button
-          type="button"
-          className="reset-button"
-          onClick={onResetOverrides}
-          disabled={!hasOverrides}
-        >
-          Reset to preset
-        </button>
+        <div className="editor-toolbar">
+          <button
+            type="button"
+            className="reset-button"
+            onClick={onResetOverrides}
+            disabled={!hasOverrides}
+          >
+            Reset to preset
+          </button>
+          <button
+            type="button"
+            className="reset-button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title={`Undo last change (${mod}+Z)`}
+            aria-label="Undo"
+          >
+            ↶ Undo
+          </button>
+          <button
+            type="button"
+            className="reset-button"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title={`Redo (${mod}+Shift+Z)`}
+            aria-label="Redo"
+          >
+            ↷ Redo
+          </button>
+        </div>
       </div>
 
       <details className="editor-group" open>
@@ -209,8 +243,8 @@ export function ThemeEditor({
           {c('Border', 'borderColor')}
           {c('Text', 'textColor')}
           {c('Text secondary', 'textSecondaryColor')}
-          {c('Link', 'linkColor')}
-          {c('Mention', 'mentionColor')}
+          {c('Links (incoming side)', 'linkColor', 'Links / @mentions / $tickers / handles inside incoming bubbles')}
+          {c('Links (own side)', 'linkColorOwn', 'Same on own bubbles')}
         </div>
       </details>
 
@@ -246,11 +280,12 @@ export function ThemeEditor({
       <details className="editor-group" open>
         <summary>Embeds &amp; per-side accents</summary>
         <div className="editor-fields">
-          {c('Other-side embed background', 'embedCardColor', 'Token cards, X / link previews on incoming messages')}
-          {c('Own message accent', 'messageOwnAccentColor', 'Reply quote + token-card bg on own bubbles')}
+          {c('Own-side embed background', 'ownEmbedBgColor', 'All embed cards on own bubbles (token / link / group / reply quote). Defaults to a shade of own bubble.')}
+          {c('Other-side embed background', 'otherEmbedBgColor', 'Same on incoming messages. Defaults to a shade of incoming bubble.')}
           {c('Own accent (soft)', 'messageOwnAccentSoftColor', 'Reply bar stripe + reaction passive on own')}
-          {c('Other message accent', 'messageOtherAccentColor', 'Reply quote bg on incoming bubbles')}
           {c('Other accent (soft)', 'messageOtherAccentSoftColor', 'Reply bar stripe on incoming')}
+          {c('Own message accent', 'messageOwnAccentColor', 'Inline reaction (own active)')}
+          {c('Other message accent', 'messageOtherAccentColor', 'Inline reaction (other active)')}
         </div>
       </details>
 

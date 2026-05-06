@@ -173,9 +173,27 @@ button {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42),
               0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
+
+/* When the chat is open, lift the close button ABOVE the iframe top
+ * edge so it sits outside the chat surface — otherwise it overlaps the
+ * compose area / Connect-wallet CTA which is the "active zone" of the
+ * widget. SDK floating-right defaults: iframe 380×520 anchored at
+ * bottom:20 right:20 → top edge sits 540px from viewport bottom; we
+ * place the button 12px above that. Opaque dark bg (no alpha) so the
+ * button reads as a distinct system control, not as a translucent
+ * pseudo-overlay. */
 .demo-chat-launcher-open {
-  background: rgba(20, 20, 28, 0.92);
-  font-size: 28px;
+  bottom: 552px;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+  background: #14141c;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.demo-chat-launcher-open:hover {
+  background: #1c1c25;
+  transform: scale(1.08);
 }
 
 /* Hint shown inside the chat-frame when the floating widget is closed
@@ -443,6 +461,16 @@ button {
   flex-direction: column;
   gap: 8px;
 }
+.editor-toolbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.editor-toolbar .reset-button {
+  margin-top: 0;
+}
+
 .reset-button {
   margin-top: 10px;
   padding: 6px 12px;

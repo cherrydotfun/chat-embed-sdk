@@ -47,6 +47,12 @@ export function applyFloatingStyles(
   iframe.style[position === 'floating-right' ? 'right' : 'left'] = '20px';
   iframe.style.width = '380px';
   iframe.style.height = '520px';
+  // Cap to viewport so the widget never extends past the screen edges
+  // on short viewports (e.g. mobile portrait, embedded panes). The 40px
+  // budget keeps the 20px anchor on the bottom-right + 20px breathing
+  // room on the opposite side.
+  iframe.style.maxWidth = 'calc(100vw - 40px)';
+  iframe.style.maxHeight = 'calc(100vh - 40px)';
   iframe.style.borderRadius = '16px';
   iframe.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
   iframe.style.zIndex = '2147483647'; // Max z-index

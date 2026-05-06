@@ -16,6 +16,8 @@ export interface EmbedTheme {
   textColor?: string;
   textSecondaryColor?: string;
   linkColor?: string;
+  linkColorOwn?: string;
+  /** @deprecated alias for linkColor */
   mentionColor?: string;
 
   incomingBubbleColor?: string;
@@ -31,6 +33,9 @@ export interface EmbedTheme {
   sendButtonColor?: string;
   sendButtonTextColor?: string;
 
+  ownEmbedBgColor?: string;
+  otherEmbedBgColor?: string;
+  /** @deprecated alias for otherEmbedBgColor */
   embedCardColor?: string;
 
   messageActionsColor?: string;
@@ -59,7 +64,7 @@ export interface EmbedTheme {
   fontSize?: 'sm' | 'md' | 'lg';
 }
 
-export type PresetId = 'cherry' | 'light-fun' | 'light-restrained' | 'dark-restrained';
+export type PresetId = 'cherry' | 'warm' | 'light-restrained' | 'dark-restrained';
 
 /**
  * How the chat surface mounts inside the host page. Each value maps to a

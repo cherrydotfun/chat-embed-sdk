@@ -14,9 +14,14 @@ export interface EmbedTheme {
   // ── Text ──────────────────────────────────────────────────────────────
   textColor?: string;
   textSecondaryColor?: string;
-  /** Colour for hyperlinks rendered inside messages. */
+  /**
+   * Colour for every clickable glyph inside an INCOMING bubble — links,
+   * @mentions, $tickers, handle buttons. One uniform tone per side.
+   */
   linkColor?: string;
-  /** Colour for @mentions and group mention chips inside messages. */
+  /** Same as `linkColor` but for clickable text inside an OWN bubble. */
+  linkColorOwn?: string;
+  /** @deprecated alias for `linkColor`; back-compat fallback. */
   mentionColor?: string;
 
   // ── Bubbles ───────────────────────────────────────────────────────────
@@ -58,8 +63,18 @@ export interface EmbedTheme {
    */
   sendButtonTextColor?: string;
 
-  // ── Embed cards (link/token/group previews) ───────────────────────────
-  /** Background for embed cards (TokenCard, link previews, group previews). */
+  // ── Embed-like cards (token / link / group preview / reply quote) ────
+  /**
+   * Background for every embed-like card on OWN messages — token cards,
+   * link previews, group previews, and the reply-quote bubble. Defaults
+   * to a one-shade variation of `ownBubbleColor` so the card sits
+   * coherently with the surrounding bubble.
+   */
+  ownEmbedBgColor?: string;
+  /** Same as above but for incoming messages — defaults to a shade of
+   *  `incomingBubbleColor`. */
+  otherEmbedBgColor?: string;
+  /** @deprecated alias for `otherEmbedBgColor`; kept for back-compat. */
   embedCardColor?: string;
 
   // ── Floating UI ───────────────────────────────────────────────────────

@@ -143,6 +143,13 @@ export class CherryEmbed {
   }
 
   setTheme(theme: Partial<EmbedTheme>): void {
+    // Keep config.theme in sync with what the iframe currently has so
+    // that — after the iframe reloads (e.g. when the user signs in and
+    // EmbedShell calls `window.location.reload()`) — the SDK can replay
+    // the latest palette via the `ready` re-init, not the stale theme
+    // captured at construction time.
+    const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
+    (this.config as { theme?: EmbedTheme }).theme = merged;
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
   }
 
@@ -155,6 +162,9 @@ export class CherryEmbed {
    * previous one.
    */
   resetTheme(): void {
+    // Mirror the reset on the host-side cache so a subsequent iframe
+    // reload doesn't re-apply a theme the user already cleared.
+    (this.config as { theme?: EmbedTheme }).theme = undefined;
     this.bridge?.sendCommand('resetTheme', {});
   }
 

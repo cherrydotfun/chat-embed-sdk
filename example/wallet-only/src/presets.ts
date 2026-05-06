@@ -15,80 +15,105 @@ export const PRESETS: ThemePreset[] = [
     label: 'Cherry',
     blurb: 'Default brand — pink/purple gradient, dark surface.',
     swatches: ['#ff1493', '#4a1d56'],
+    /**
+     * Every field here matches the iframe's built-in default exactly —
+     * filling them out so the editor surfaces the actual hex values
+     * (instead of leaving inputs blank with a placeholder). `ownBubbleColor`
+     * + `sendButtonColor` stay UNSET on purpose so the iframe falls back
+     * to its primary→accent gradient — set them to flatten into a solid
+     * tile.
+     */
     theme: {
       mode: 'dark',
-      // Empty payload reverts the iframe to its built-in defaults.
+      primaryColor: '#ff1493',
+      accentColor: '#c026d3',
+      backgroundColor: '#0a0a0f',
+      surfaceColor: '#12111a',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
+      textColor: '#ffffff',
+      textSecondaryColor: 'rgba(255, 255, 255, 0.5)',
+      linkColor: '#ff1493',
+      linkColorOwn: 'rgb(255, 232, 243)',
+      incomingBubbleColor: '#4a1d56',
+      incomingBubbleBorderColor: '#6b2d7b',
+      ownBubbleTextColor: '#ffffff',
+      headerColor: '#12111a',
+      headerTextColor: '#ffffff',
+      inputColor: '#12111a',
+      inputTextColor: '#ffffff',
+      sendButtonTextColor: '#ffffff',
+      ownEmbedBgColor: '#ff4dad',
+      otherEmbedBgColor: '#5d3068',
+      messageActionsColor: '#1a1923',
+      messageActionsTextColor: '#ffffff',
+      tooltipColor: '#0a0a0f',
+      tooltipTextColor: '#ffffff',
+      emojiPickerColor: '#1a1923',
+      avatarHoverColor: 'rgba(255, 255, 255, 0.06)',
+      loaderColor: '#ff1493',
+      messageOwnAccentColor: '#f54dbb',
+      messageOwnAccentSoftColor: '#ffb3eb',
+      messageOtherAccentColor: '#6b307d',
+      messageOtherAccentSoftColor: '#d6a6e3',
+      iconButtonColor: '#7a7c85',
+      iconButtonHoverColor: '#d4d4d8',
+      modalOverlayColor: 'rgba(0, 0, 0, 0.6)',
+      dangerColor: '#ef4444',
+      gmColor: '#FFB800',
+      roleBadgeColor: '#ff1493',
+      fontFamily: 'Outfit',
+      fontSize: 'md',
     },
   },
   {
-    id: 'light-fun',
-    label: 'Light Fun',
-    blurb: 'Sunny coral on warm cream — playful but not loud.',
-    swatches: ['#fb7185', '#fbbf24'],
+    id: 'warm',
+    label: 'Warm',
+    blurb: 'Dusty rose on cream — soft, romantic, low-saturation.',
+    swatches: ['#D97886', '#F2DDE0'],
     theme: {
       mode: 'light',
-      primaryColor: '#fb7185',
-      // Accent kept warm so the primary→accent gradient is no longer used
-      // anywhere visible (own bubble + send button are now solid, see
-      // ownBubbleColor / sendButtonColor below). Old #06b6d4 cyan turned
-      // own bubbles into a coral→cyan rainbow that read as kitsch.
-      accentColor: '#fbbf24',
-      backgroundColor: '#fff7ed',
-      surfaceColor: '#ffedd5',
+      primaryColor: '#D97886',
+      accentColor: '#C96877',
+      backgroundColor: '#FBF6F4',
+      surfaceColor: '#F5E6E2',
       borderColor: 'rgba(124, 45, 18, 0.12)',
-      textColor: '#7c2d12',
-      textSecondaryColor: 'rgba(124, 45, 18, 0.62)',
-      linkColor: '#0891b2',
-      mentionColor: '#ea580c',
-      incomingBubbleColor: '#ffe4e6',
-      incomingBubbleBorderColor: '#fecdd3',
-      // Solid coral instead of the gradient — no more rainbow on own bubbles.
-      ownBubbleColor: '#fb7185',
-      // Dark brown reads with high contrast on coral and stays consistent
-      // with the rest of the warm-light palette. White on coral was tech-
-      // nically passable but visually pale next to the dark text used on
-      // every other surface.
-      ownBubbleTextColor: '#7c2d12',
-      headerColor: '#fed7aa',
-      headerTextColor: '#7c2d12',
-      inputColor: '#fff7ed',
-      inputTextColor: '#7c2d12',
-      sendButtonColor: '#fb7185',
-      // Slightly darker than incoming bubble so token cards / link previews
-      // sit visibly on top instead of melting into the message surface.
-      embedCardColor: '#fbcfe8',
-      // Cream — pinned message items + reply menu sit cleanly on a warm
-      // off-white instead of competing with the peach header.
-      messageActionsColor: '#fff7ed',
-      messageActionsTextColor: '#78350f',
-      tooltipColor: '#7c2d12',
-      tooltipTextColor: '#fff7ed',
-      emojiPickerColor: '#fff7ed',
-      avatarHoverColor: 'rgba(251, 113, 133, 0.18)',
-      loaderColor: '#fb7185',
-      // Quote / token-card / reaction-passive — clean white card lifted
-      // off the coral bubble. Pink-on-coral previously felt muddy; pure
-      // white reads as a deliberate inset and lets the dark-brown text
-      // sit on a neutral surface.
-      messageOwnAccentColor: '#ffffff',
-      // Reply bar stripe + own-active reaction — dark brown matches the
-      // body text, gives a calm marker without bringing a third hue.
-      messageOwnAccentSoftColor: '#7c2d12',
-      // Same recipe on the other side — white card on the light-pink
-      // incoming bubble, dark stripe.
-      messageOtherAccentColor: '#ffffff',
-      messageOtherAccentSoftColor: '#7c2d12',
-      iconButtonColor: '#9a3412',
-      iconButtonHoverColor: '#7c2d12',
-      modalOverlayColor: 'rgba(124, 45, 18, 0.45)',
-      dangerColor: '#dc2626',
-      // Warm orange — replaces the default amber so the GM 👋 N counter
-      // contrasts the peach header. Solid fill (was 0.15-alpha tint) makes
-      // it visible at a glance.
-      gmColor: '#ea580c',
-      // MOD / OWNER chips share the mention orange so role tags read as
-      // distinctive without bringing in an unrelated hue.
-      roleBadgeColor: '#ea580c',
+      textColor: '#4A1B26',
+      textSecondaryColor: 'rgba(74, 27, 38, 0.6)',
+      linkColor: '#9E4E5C',
+      linkColorOwn: '#FBE7EA',
+      incomingBubbleColor: '#F2DDE0',
+      incomingBubbleBorderColor: '#E7CCD1',
+      ownBubbleColor: '#D97886',
+      ownBubbleTextColor: '#FBF6F4',
+      headerColor: '#F5E6E2',
+      headerTextColor: '#4A1B26',
+      inputColor: '#FBF6F4',
+      inputTextColor: '#4A1B26',
+      sendButtonColor: '#D97886',
+      // Embed cards (token / link / group / reply quote) — one tone per
+      // side, slightly darker than the bubble so the card visibly sits
+      // on top of the bubble while staying in the same hue family.
+      ownEmbedBgColor: '#C96877',
+      otherEmbedBgColor: '#E7CCD1',
+      messageActionsColor: '#FBF6F4',
+      messageActionsTextColor: '#4A1B26',
+      tooltipColor: '#4A1B26',
+      tooltipTextColor: '#FBF6F4',
+      emojiPickerColor: '#FBF6F4',
+      avatarHoverColor: 'rgba(217, 120, 134, 0.18)',
+      loaderColor: '#D97886',
+      // Inline reactions (4 slots — own/other × active/passive). The
+      // hex values come straight from the user's reaction-grid spec.
+      messageOwnAccentSoftColor: '#9E4E5C',  // own active on own bubble
+      messageOwnAccentColor:     '#F1C5CB',  // other active on own bubble (passive)
+      messageOtherAccentSoftColor: '#B95A69', // own active on other bubble
+      messageOtherAccentColor:     '#F1E3DF', // other active on other bubble (passive)
+      iconButtonColor: '#9A3412',
+      iconButtonHoverColor: '#4A1B26',
+      modalOverlayColor: 'rgba(74, 27, 38, 0.45)',
+      dangerColor: '#B91C1C',
+      gmColor: '#9E4E5C',
+      roleBadgeColor: '#9E4E5C',
       fontFamily: 'Poppins',
       fontSize: 'md',
     },
