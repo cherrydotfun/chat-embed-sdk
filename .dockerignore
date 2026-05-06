@@ -1,0 +1,41 @@
+# Build outputs (regenerated inside the image)
+node_modules
+dist
+example/*/node_modules
+example/*/dist
+
+# Local env / secrets — must never enter the image
+.env
+.env.*
+!.env.example
+example/.env
+example/.env.*
+!example/.env.example
+
+# Lock files (gitignored anyway, but keep the build context tight)
+bun.lock
+package-lock.json
+
+# Git / editor / OS noise
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+*.log
+*.local
+*.tsbuildinfo
+
+# Other example modes — image only ships wallet-only
+example/app-trusted
+example/app-trusted+wallet
+
+# Tests / dev-only configs
+vitest.config.ts
+tsconfig.test.json
+
+# Skills / docs / large attachments
+skills
+README.md
+LICENSE

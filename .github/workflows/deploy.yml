@@ -1,0 +1,92 @@
+name: Embed Example - Build & Deploy
+
+# Triggers on pushes to main that touch the SDK source, the wallet-only
+# example, or any deployment file. Public repo: nothing in this workflow
+# is sensitive — every value (host, path, image name, app id) is supplied
+# via repo Secrets and masked in run logs.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'example/wallet-only/**'
+      - 'package.json'
+      - 'tsup.config.ts'
+      - 'tsconfig.json'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker-compose.prod.yml'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get short commit hash
+        id: commit
+        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Log in to GitLab registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.gitlab.com
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          build-args: |
+            BASE_PATH=${{ secrets.TRAEFIK_PATH_PREFIX }}
+          tags: ${{ secrets.REGISTRY_PATH }}/${{ secrets.IMAGE_NAME }}:${{ steps.commit.outputs.short }}
+
+      - name: Copy docker-compose.prod.yml to VM
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: deploybot
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: docker-compose.prod.yml
+          target: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Create .env on VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: deploybot
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            mkdir -p ${{ secrets.DEPLOY_PATH }}
+            cat > ${{ secrets.DEPLOY_PATH }}/.env << 'ENVEOF'
+            IMAGE_TAG=${{ secrets.REGISTRY_PATH }}/${{ secrets.IMAGE_NAME }}:${{ steps.commit.outputs.short }}
+            APP_WALLETLESS_ID=${{ secrets.APP_WALLETLESS_ID }}
+            CHERRY_EMBED_URL=${{ secrets.CHERRY_EMBED_URL }}
+            CHERRY_API_URL=${{ secrets.CHERRY_API_URL }}
+            ROOM_ID=${{ secrets.ROOM_ID }}
+            BASE_PATH=${{ secrets.TRAEFIK_PATH_PREFIX }}
+            TRAEFIK_ROUTER_NAME=${{ secrets.TRAEFIK_ROUTER_NAME }}
+            TRAEFIK_HOST=${{ secrets.TRAEFIK_HOST }}
+            TRAEFIK_PATH_PREFIX=${{ secrets.TRAEFIK_PATH_PREFIX }}
+            ENVEOF
+
+      - name: Deploy to remote VM
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: deploybot
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            docker pull ${{ secrets.REGISTRY_PATH }}/${{ secrets.IMAGE_NAME }}:${{ steps.commit.outputs.short }}
+            docker compose -f docker-compose.prod.yml down --remove-orphans || true
+            docker compose -f docker-compose.prod.yml up -d

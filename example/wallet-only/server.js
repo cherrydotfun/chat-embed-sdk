@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * wallet-only example — server.js (production)
  *
@@ -17,11 +15,19 @@
  * talks directly to the Cherry API once the iframe boots.
  */
 
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+import { config as dotenvConfig } from 'dotenv';
+import express from 'express';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Best-effort load of the shared example/.env when running locally.
+// In Docker the file isn't shipped — process.env is populated by the
+// container `environment:` block, and dotenv silently no-ops on ENOENT.
+dotenvConfig({ path: path.join(__dirname, '..', '.env') });
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_ID =
@@ -29,7 +35,13 @@ const APP_ID =
   process.env.APP_ID ||
   process.env.CHERRY_APP_ID;
 const CHERRY_EMBED_URL = process.env.CHERRY_EMBED_URL || 'https://embed.cherry.fun';
+const CHERRY_API_URL = process.env.CHERRY_API_URL || '';
 const ROOM_ID = process.env.ROOM_ID || process.env.CHERRY_ROOM_ID || '';
+
+// Optional path-prefix mount for sub-path deploys (e.g. behind Traefik at
+// `/chat-embed-example`). Empty/unset means root mount. Convention:
+// no trailing slash. Must match the Vite `base` used at build time.
+const BASE_PATH = (process.env.BASE_PATH ?? '').replace(/\/$/, '');
 
 if (!APP_ID) {
   console.error('[wallet-only] FATAL: APP_ID is not set in ../.env');
@@ -54,41 +66,50 @@ if (!fs.existsSync(SDK_BUNDLE)) {
 }
 
 const app = express();
+const router = express.Router();
 
 // Public app config — only safe-to-expose values.
-app.get('/config.json', (_req, res) => {
+router.get('/config.json', (_req, res) => {
   res.json({
     appId: APP_ID,
     embedUrl: CHERRY_EMBED_URL,
     roomId: ROOM_ID || null,
+    apiUrl: CHERRY_API_URL || null,
   });
 });
 
 // Embed SDK IIFE bundle — proxied from the local SDK build so the demo
 // works without a CDN. Production deploys can point at https://cdn.cherry.fun
 // instead by editing index.html.
-app.get('/cherry-embed.js', (_req, res) => {
+router.get('/cherry-embed.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.sendFile(SDK_BUNDLE);
 });
 
 // Static assets from the Vite build.
-app.use(express.static(DIST, { extensions: ['html'] }));
+router.use(express.static(DIST, { extensions: ['html'] }));
 
 // SPA history fallback — any non-asset GET resolves to index.html so
 // future client-side routing keeps working.
-app.get('*', (req, res, next) => {
+router.get('*', (req, res, next) => {
   if (req.method !== 'GET') return next();
   res.sendFile(path.join(DIST, 'index.html'));
 });
+
+// Mount everything under BASE_PATH (or '/' if unset). Traefik passes the
+// full path through (no strip-prefix), so the Vite build's BASE_URL and
+// this Express mount must agree.
+app.use(BASE_PATH || '/', router);
 
 app.listen(PORT, () => {
   console.log('────────────────────────────────────────────────────');
   console.log('  Cherry Embed example — wallet-only (themable demo)');
   console.log('────────────────────────────────────────────────────');
-  console.log(`  http://localhost:${PORT}`);
+  console.log(`  http://localhost:${PORT}${BASE_PATH || ''}`);
   console.log(`  APP_ID:           ${APP_ID}`);
   console.log(`  CHERRY_EMBED_URL: ${CHERRY_EMBED_URL}`);
+  console.log(`  CHERRY_API_URL:   ${CHERRY_API_URL || '(unset)'}`);
+  console.log(`  BASE_PATH:        ${BASE_PATH || '(root)'}`);
   console.log('────────────────────────────────────────────────────');
   console.log('  No host backend is involved in auth.');
   console.log('  This server only serves /dist + /config.json + /cherry-embed.js.');

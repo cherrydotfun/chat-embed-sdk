@@ -105,4 +105,12 @@ export interface DemoConfig {
   appId: string;
   embedUrl: string;
   roomId: string | null;
+  /**
+   * Cherry messaging-server origin (e.g. https://chat.cherry.fun). Not
+   * read by the wallet-only demo today — the iframe handles every API
+   * call from its own origin — but exposed here for forward-compat with
+   * future host-page features (server-side discovery, status checks,
+   * etc.) so the deploy `.env` can supply it without code churn.
+   */
+  apiUrl?: string | null;
 }

@@ -15,7 +15,14 @@ const APP_ID =
   '';
 const ROOM_ID = process.env.ROOM_ID || process.env.CHERRY_ROOM_ID || '';
 const EMBED_URL = process.env.CHERRY_EMBED_URL || 'https://embed.cherry.fun';
+const API_URL = process.env.CHERRY_API_URL || '';
 const PORT = Number(process.env.PORT) || 8088;
+
+// Optional path-prefix for sub-path deploys (e.g. served behind Traefik at
+// `/chat-embed-example` on a shared domain). Empty / unset means root-mount.
+// Convention: BASE_PATH has no trailing slash; Vite `base` always has one.
+const RAW_BASE_PATH = (process.env.BASE_PATH ?? '').replace(/\/$/, '');
+const VITE_BASE = RAW_BASE_PATH ? `${RAW_BASE_PATH}/` : '/';
 
 const SDK_BUNDLE = path.resolve(ROOT, '..', '..', 'dist', 'index.global.js');
 
@@ -38,6 +45,7 @@ function devEndpoints(): Plugin {
             appId: APP_ID,
             embedUrl: EMBED_URL,
             roomId: ROOM_ID || null,
+            apiUrl: API_URL || null,
           }),
         );
       });
@@ -63,6 +71,7 @@ function devEndpoints(): Plugin {
 }
 
 export default defineConfig({
+  base: VITE_BASE,
   plugins: [react(), devEndpoints()],
   server: {
     port: PORT,

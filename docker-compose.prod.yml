@@ -1,0 +1,49 @@
+# =====================================================================
+#  chat-embed-sdk — wallet-only example, production compose stack.
+# =====================================================================
+#  Every value is supplied via the .env file the deploy workflow writes
+#  on the VM at ${DEPLOY_PATH}/.env. Nothing in this file (or in the
+#  public repo) discloses the host, path prefix, image registry, or
+#  app credentials.
+#
+#  Routing notes (mirrors dapps-analytics so the Cherry domain stays
+#  un-overridden by other services):
+#    - Unique TRAEFIK_ROUTER_NAME prevents collision with sibling
+#      routers on the same Traefik instance.
+#    - priority=200 matches the analytics service so PathPrefix-based
+#      routers all share one tier and never shadow each other.
+#    - traefik.docker.network=proxy pins the right network when the
+#      container is reachable on multiple Docker networks.
+# =====================================================================
+
+services:
+  app:
+    image: ${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      - APP_WALLETLESS_ID=${APP_WALLETLESS_ID}
+      - CHERRY_EMBED_URL=${CHERRY_EMBED_URL}
+      - CHERRY_API_URL=${CHERRY_API_URL}
+      - ROOM_ID=${ROOM_ID}
+      - BASE_PATH=${BASE_PATH}
+      - PORT=3000
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+
+      # === Router (Host + PathPrefix on the shared Cherry domain) ===
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.rule=Host(`${TRAEFIK_HOST}`) && PathPrefix(`${TRAEFIK_PATH_PREFIX}`)"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.entrypoints=websecure"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls=true"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.tls.certresolver=tlschallenge"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.priority=200"
+      - "traefik.http.routers.${TRAEFIK_ROUTER_NAME}.service=${TRAEFIK_ROUTER_NAME}"
+
+      # === Service (port matches Express PORT inside container) ===
+      - "traefik.http.services.${TRAEFIK_ROUTER_NAME}.loadbalancer.server.port=3000"
+
+networks:
+  proxy:
+    external: true

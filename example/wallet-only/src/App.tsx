@@ -58,10 +58,12 @@ export default function App() {
   // Fetch the public app config exactly once. The endpoint comes from the
   // dev middleware in vite.config.ts; in production server.js exposes the
   // same shape from the shared root .env.
+  // Uses Vite's BASE_URL so sub-path deploys (e.g. served at
+  // /chat-embed-example/) resolve to /chat-embed-example/config.json.
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/config.json');
+        const res = await fetch(`${import.meta.env.BASE_URL}config.json`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = (await res.json()) as DemoConfig;
         if (!body.appId) throw new Error('Missing appId in /config.json');
