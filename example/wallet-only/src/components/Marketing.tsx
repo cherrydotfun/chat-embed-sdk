@@ -3,7 +3,7 @@ export function Marketing() {
     <section className="marketing">
       <div className="marketing-eyebrow">Cherry Embed</div>
       <h1 className="marketing-title">
-        Drop-in wallet-native chat for any website.
+        Drop-in wallet-native chat for any dApp
       </h1>
       <p className="marketing-lede">
         One <code>&lt;script&gt;</code> tag and a <code>div</code>. The iframe
