@@ -3,4 +3,8 @@ dist
 bun.lock
 package-lock.json
 *.local
+# Ignore every .env variant (local dev configs, backups, per-deploy
+# overrides) but keep `.env.example` tracked as the template.
 .env
+.env.*
+!.env.example
