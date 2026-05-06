@@ -68,6 +68,16 @@ export class CherryEmbed {
       position: this.config.position ?? 'inline',
     });
 
+    // 2a. If mounted collapsed, hide IMMEDIATELY — before awaiting the
+    //     iframe's `ready` event below. Otherwise the iframe stays fully
+    //     visible for up to 30s while the room loads, which on a floating
+    //     mount looks like a giant chat panel that refuses to close.
+    if (this.config.collapsed) {
+      this.iframe.style.opacity = '0';
+      this.iframe.style.display = 'none';
+      this._isVisible = false;
+    }
+
     // 3. Create bridge
     const origin = getEmbedOrigin(this.config.embedUrl);
     this.bridge = new EmbedBridge(this.iframe, origin);
@@ -89,12 +99,9 @@ export class CherryEmbed {
 
     // 6. Wait for ready event with timeout. `sendInitConfigs()` will already
     //    have fired via the handler above by the time this resolves.
+    //    (Step 2a above already hid the iframe if `collapsed: true`, so
+    //    no re-hide is needed here.)
     await this.waitForReady(30_000);
-
-    // 7. Handle collapsed state
-    if (this.config.collapsed) {
-      this.hide();
-    }
   }
 
   private sendInitConfigs(): void {
@@ -137,6 +144,18 @@ export class CherryEmbed {
 
   setTheme(theme: Partial<EmbedTheme>): void {
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
+  }
+
+  /**
+   * Reset every theme field back to the iframe's built-in defaults.
+   * `setTheme(...)` merges into existing state on the iframe side, so
+   * hosts that switch between completely different palettes should call
+   * `resetTheme()` first and then `setTheme(newPalette)` — otherwise
+   * fields not present in the new palette will leak through from the
+   * previous one.
+   */
+  resetTheme(): void {
+    this.bridge?.sendCommand('resetTheme', {});
   }
 
   setLayout(layout: Partial<EmbedLayout>): void {

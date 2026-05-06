@@ -1,16 +1,113 @@
 export interface EmbedTheme {
   mode?: 'dark' | 'light';
+
+  // ── Core palette (drive most derived colours) ─────────────────────────
   primaryColor?: string;
   accentColor?: string;
+  /** Page / chat-area background. */
   backgroundColor?: string;
+  /** Surface tone used as a fallback for header / input when not overridden. */
   surfaceColor?: string;
+  /** Border colour. When unset, derived from textColor opacity. */
+  borderColor?: string;
+
+  // ── Text ──────────────────────────────────────────────────────────────
   textColor?: string;
   textSecondaryColor?: string;
+  /** Colour for hyperlinks rendered inside messages. */
+  linkColor?: string;
+  /** Colour for @mentions and group mention chips inside messages. */
+  mentionColor?: string;
+
+  // ── Bubbles ───────────────────────────────────────────────────────────
+  /**
+   * Background colour for incoming message bubbles. Defaults to the brand
+   * purple used by chat.cherry.fun (#4a1d56). Override to recolour received
+   * messages without touching the surface (header / input) palette.
+   */
+  incomingBubbleColor?: string;
+  /** Border colour for incoming bubbles. Pairs with `incomingBubbleColor`. */
+  incomingBubbleBorderColor?: string;
+  /**
+   * Solid background colour for own (outgoing) bubbles. When set, replaces
+   * the default primary→accent gradient with a flat fill.
+   */
+  ownBubbleColor?: string;
+  /** Text colour inside own bubbles. */
+  ownBubbleTextColor?: string;
+
+  // ── Header ────────────────────────────────────────────────────────────
+  /** Header background. Falls back to surfaceColor when unset. */
+  headerColor?: string;
+  /** Header text colour. Falls back to textColor when unset. */
+  headerTextColor?: string;
+
+  // ── Input + Send button ───────────────────────────────────────────────
+  /** Background colour for the message input field. Falls back to surface. */
+  inputColor?: string;
+  /** Text colour inside the input field. */
+  inputTextColor?: string;
+  /**
+   * Solid background colour for the Send button. When set, replaces the
+   * default primary→accent gradient with a flat fill.
+   */
+  sendButtonColor?: string;
+  /**
+   * Send-button icon colour (paper-plane). Defaults to white. Override
+   * when the button background is too light for white to remain visible.
+   */
+  sendButtonTextColor?: string;
+
+  // ── Embed cards (link/token/group previews) ───────────────────────────
+  /** Background for embed cards (TokenCard, link previews, group previews). */
+  embedCardColor?: string;
+
+  // ── Floating UI ───────────────────────────────────────────────────────
+  /** Background for the small reply/delete actions menu next to messages. */
+  messageActionsColor?: string;
+  messageActionsTextColor?: string;
+  tooltipColor?: string;
+  tooltipTextColor?: string;
+  /** Emoji-picker panel background. */
+  emojiPickerColor?: string;
+  /** Avatar hover-overlay tint. */
+  avatarHoverColor?: string;
+  /** Loading spinner colour. Defaults to primary. */
+  loaderColor?: string;
+
+  // ── Per-side message accents ──────────────────────────────────────────
+  /**
+   * Accent for own (outgoing) message contextual surfaces — reply bars,
+   * token-card backgrounds, inline reaction badges. Default `#f54dbb`.
+   */
+  messageOwnAccentColor?: string;
+  /** Soft variant of the own-side accent (light pink). Default `#ffb3eb`. */
+  messageOwnAccentSoftColor?: string;
+  /**
+   * Accent for incoming message contextual surfaces. Default `#6b307d`.
+   */
+  messageOtherAccentColor?: string;
+  /** Soft variant of the other-side accent (light purple). Default `#d6a6e3`. */
+  messageOtherAccentSoftColor?: string;
+
+  // ── Input toolbar icons (GIF / emoji / attach) ────────────────────────
+  iconButtonColor?: string;
+  iconButtonHoverColor?: string;
+
+  // ── Modal overlays + danger / error tone ──────────────────────────────
+  /** Backdrop colour for modals (delete-confirm, send-image). */
+  modalOverlayColor?: string;
+  /** Danger / error red used by destructive actions and error states. */
+  dangerColor?: string;
+
+  /** Accent for the GM (👋) counter badge in the header. Default `#FFB800`. */
+  gmColor?: string;
+  /** Accent for moderation role chips (MOD / OWNER). Defaults to mention. */
+  roleBadgeColor?: string;
+
+  // ── Typography ────────────────────────────────────────────────────────
   fontFamily?: string;
   fontSize?: 'sm' | 'md' | 'lg';
-  borderRadius?: string;
-  avatarShape?: 'circle' | 'square';
-  compact?: boolean;
 }
 
 export interface EmbedLayout {

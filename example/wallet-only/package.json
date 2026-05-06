@@ -1,0 +1,28 @@
+{
+  "name": "cherry-embed-wallet-only-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Themable demo of @cherrydotfun/chat-embed-sdk in wallet-only mode.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit",
+    "preview": "vite preview",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11"
+  }
+}

@@ -1,116 +1,85 @@
-# wallet-only example
+# wallet-only example — themable demo
 
-authMode: `wallet-only` — no backend, wallet signature is the only auth mechanism.
+A live demo of [`@cherrydotfun/chat-embed-sdk`](../../) running in
+`authMode: wallet-only` — no backend, no token signing, no Phantom code on
+the host page. The iframe handles wallet connect and signature itself.
 
-## When to use this mode
+This page also doubles as a **theme playground**:
 
-Use `wallet-only` when:
-- You cannot or do not want to run a backend server
-- You want the simplest possible setup (pure static HTML)
-- You are building a self-hosted widget or personal dashboard
-- Full decentralization matters more than per-user rate limiting
+- Four built-in presets (Cherry / Light Fun / Light Restrained / Dark
+  Restrained).
+- A live constructor for every individual colour, font, and shape token
+  exposed by `EmbedTheme`.
+- Edits travel the postMessage bridge in ~50 ms — no reload, nothing
+  persisted.
 
-Best for:
-- Personal portfolio pages with Cherry chat
-- Static sites (GitHub Pages, IPFS, Vercel static)
-- Proof-of-concept integrations
-- Community tools where anyone can self-host the widget
-
-## Auth flow
-
-```
-user browser             Cherry server
-     |                        |
-     | -- Phantom.connect() --|
-     |    (wallet popup)      |
-     |                        |
-     | -- CherryEmbed({ walletAddress }) -- iframe loads
-     |                        |
-     | <- signChallenge request (postMessage cherry:request)
-     |    SDK calls onSignChallenge handler
-     | -- Phantom.signMessage(challenge)
-     |    (wallet popup: "Sign message?")
-     | -- cherry:response { signature }
-     | -- POST /api/embed/auth { walletAddress, signature, nonce }
-     |    Cherry verifies Ed25519 signature
-     | <- Cherry JWT (15 min)
-     |    chat session begins
-     |                        |
-```
-
-No host backend is involved at any point. Cherry controls the entire auth flow.
-
-## Requirements
-
-- Phantom browser extension: https://phantom.app
-- A Cherry embed app configured with `authMode: wallet-only` in Cherry Admin Panel
-- HTTPS origin (or localhost) — wallets will not inject into plain HTTP pages
-
-## How to run
+## Local development
 
 ```bash
-cd chat-embed-sdk/example
-cp .env.example .env   # fill in APP_ID (and optionally CHERRY_EMBED_URL)
-npm install
-npm run start:wallet-only
+# 1. Build the SDK (one-time, or after editing chat-embed-sdk/src/)
+cd chat-embed-sdk
+bun install
+bun run build
+
+# 2. Install demo deps
+cd example/wallet-only
+bun install
+
+# 3. Run the Vite dev server
+bun run dev
 ```
 
-Open http://localhost:3000
+Open <http://localhost:8088>. The Vite middleware serves both the SPA and
+the same `/config.json` + `/cherry-embed.js` endpoints that production
+does, so the demo is self-contained — you do not need to run `node
+server.js` in dev.
+
+## Production build / deploy
+
+```bash
+cd chat-embed-sdk/example/wallet-only
+bun run build      # writes ./dist/
+node server.js     # serves dist/ + /config.json + /cherry-embed.js on $PORT
+```
+
+`server.js` is a static-only Express that does not see `APP_SECRET`,
+never calls Cherry, and never participates in auth. Replace it with any
+static host (nginx, S3, Vercel) that can also expose `/config.json` and
+`/cherry-embed.js`.
 
 ## Configuration
 
-`APP_ID` and `CHERRY_EMBED_URL` are read from the **shared root `.env`**
-(`chat-embed-sdk/example/.env`) — same file that `app-trusted` and
-`app-trusted+wallet` examples use.
+`APP_ID` and `CHERRY_EMBED_URL` come from the **shared root .env**
+(`chat-embed-sdk/example/.env`) — same file the other examples use.
 
 ```ini
 APP_ID=your_app_id_here
-CHERRY_EMBED_URL=https://embed.cherry.fun   # or http://localhost:3001 for local Cherry
+CHERRY_EMBED_URL=https://embed.cherry.fun   # or http://localhost:3002 for local Cherry
+ROOM_ID=                                    # optional — preselect a room
+PORT=8088                                    # demo HTTP port
 ```
 
-`APP_SECRET` is **not used** by `wallet-only` and may be left empty.
-
-The corresponding embed app must be configured with `authMode: wallet-only`
-in the Cherry Admin Panel.
-
-## Why a server.js if it's "wallet-only"?
-
-The "wallet-only" name refers to the absence of a host backend in the **auth
-flow** — the browser talks directly to Cherry, no server-side token signing.
-The minimal `server.js` here exists only to:
-
-1. Serve static HTML
-2. Expose `APP_ID` and `CHERRY_EMBED_URL` from the shared root `.env` via
-   `GET /config.json` (so all three examples read config from the same place)
-
-It does NOT see `APP_SECRET`, does NOT call any Cherry endpoint, and does NOT
-participate in auth. In production you can replace it with any static host
-(nginx, S3, Vercel, GitHub Pages) — just inject `APP_ID` into the HTML at
-build time instead of fetching `/config.json`.
+`APP_SECRET` is **not used** here.
 
 ## Files
 
-- `server.js` — minimal Express: static + `GET /config.json`
-- `public/index.html` — minimal host page; the iframe handles wallet connect/signing
+- `index.html` — Vite entry. Loads `/cherry-embed.js` from the same origin.
+- `src/main.tsx`, `src/App.tsx` — SPA root + state management.
+- `src/components/Marketing.tsx` — sales copy + integration snippet.
+- `src/components/ThemeSwitcher.tsx` — four preset cards.
+- `src/components/ThemeEditor.tsx` — collapsible per-token constructor.
+- `src/components/DemoChat.tsx` — wraps `CherryEmbedSDK.CherryEmbed`,
+  pushes theme changes via debounced `setTheme(...)`.
+- `src/presets.ts` — the four starter themes.
+- `vite.config.ts` — dev middleware exposing `/config.json` and
+  `/cherry-embed.js`.
+- `server.js` — production server (post-build).
 
-## Limitations compared to app-trusted modes
+## Limitations
 
-- No per-user customization from host (room access lists, rate limits, etc.)
-- User sees wallet popup on every new session (Cherry JWT is 15 min)
-- No server-side session — Cherry is the only source of truth
-- Public rooms only — no ability to restrict which rooms are accessible per-user
-  (the embed app's `allowedRoomIds` setting applies globally for all users)
-
-## Key SDK pattern
-
-```js
-chat = new CherryEmbedSDK.CherryEmbed({
-  appId: APP_ID,
-  container: '#chat-container',
-  // NO token property — wallet-only mode has no embedToken
-  // NO walletAddress property — the iframe drives wallet connect/signing itself
-  embedUrl: CHERRY_EMBED_URL,
-});
-
-await chat.mount();
-```
+- Public rooms only — wallet-only does not support gated rooms with
+  per-user access lists (the embed app's `allowedRoomIds` setting applies
+  globally for all users).
+- Cherry JWT is short-lived (~15 min); the user signs again per session.
+- No per-user customisation from host (rate limits, role hints, etc.).
+- All theme overrides are in-memory: a refresh wipes them.
