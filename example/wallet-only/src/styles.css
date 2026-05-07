@@ -86,6 +86,10 @@ button {
   background: #0a0a0f;
   display: flex;
   min-height: 0;
+  /* Anchor for absolutely-positioned host chrome (collapsible bubble,
+   * draggable handle hint) so they resolve against the chat-frame box
+   * instead of leaking up to the viewport. */
+  position: relative;
 }
 
 .demo-chat-container {
@@ -93,12 +97,13 @@ button {
   display: flex;
 }
 
-/* Inline + resizable: force the iframe to fill its parent. The
- * `!important` defends against any inline width/height the SDK might
+/* Inline + collapsible + resizable: force the iframe to fill its parent.
+ * The `!important` defends against any inline width/height the SDK might
  * leak in — but ONLY on these layout-bound modes. The floating mode
  * relies on the SDK's `position: fixed; width: 380px; height: 520px;`
  * inline styles, so do NOT apply this rule there. */
 .demo-chat-inline iframe,
+.demo-chat-collapsible iframe,
 .demo-chat-resizable iframe {
   flex: 1;
   width: 100% !important;
@@ -120,9 +125,12 @@ button {
 
 /* ── Display modes ───────────────────────────────────────────────────── */
 
-/* Resizable: drag the bottom-right corner to size the chat. min/max keep
- * the widget usable on both small panes and full-screen demos. */
-.demo-chat-resizable {
+/* Resizable: a wrapper around the iframe container that owns both the
+ * `resize: both` corner grip AND a drag handle on top so the panel can be
+ * repositioned within the chat-frame. The transform (drag offset) is
+ * applied inline from React. min/max keep the widget usable on both small
+ * panes and full-screen demos. */
+.demo-chat-stage-resizable {
   flex: 0 1 auto;
   align-self: flex-start;
   resize: both;
@@ -135,6 +143,56 @@ button {
   max-height: calc(100vh - 48px);
   border-radius: var(--radius);
   background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
+  /* Wrapper is now the draggable element — `transform` is set inline. */
+  will-change: transform;
+}
+
+/* The inner iframe container fills the wrapper below the drag handle. */
+.demo-chat-stage-resizable > .demo-chat-resizable {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Drag handle on top of the resizable panel. Pointer events bubble up to
+ * React handlers, which translate the wrapper. */
+.demo-chat-drag-handle {
+  flex: 0 0 auto;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+.demo-chat-drag-handle:active {
+  cursor: grabbing;
+  background: rgba(255, 255, 255, 0.06);
+}
+.demo-chat-drag-grip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.demo-chat-drag-grip span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--text-faint);
+}
+.demo-chat-drag-label {
+  color: var(--text-faint);
 }
 
 /* Floating: SDK positions the iframe `position: fixed` in the viewport
@@ -148,8 +206,8 @@ button {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 56px;
-  height: 56px;
+  width: 84px;
+  height: 84px;
   border-radius: 9999px;
   border: 0;
   /* Background + colour are also set inline from React based on the
@@ -157,9 +215,9 @@ button {
    * gradient is the fallback when no theme is applied. */
   background: linear-gradient(135deg, #ff1493 0%, #c026d3 100%);
   color: #fff;
-  font-size: 24px;
+  font-size: 36px;
   line-height: 1;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35),
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45),
               0 0 0 1px rgba(255, 255, 255, 0.06) inset;
   cursor: pointer;
   /* Above the iframe (DemoChat sets iframe z-index to 999998 in floating
@@ -773,4 +831,113 @@ button {
 }
 .segmented:hover:not(.segmented-active) {
   color: var(--text);
+}
+
+/* ── Collapsible display mode ────────────────────────────────────────── */
+
+/* Container fills whatever flex space is left after the side tab. The
+ * iframe is mounted at full container size so its session is unaffected
+ * by toggling — when closed we just visibility-hide it. */
+.demo-chat-collapsible {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.demo-chat-collapsible-closed iframe {
+  /* `visibility: hidden` (vs `display: none`) keeps the iframe laid out
+   * so its session/socket stay alive and re-show is instant. */
+  visibility: hidden;
+}
+
+/* The trigger is a vertical tab attached to the left edge of the
+ * chat-frame, NOT a free-floating bubble. It's a real flex sibling of
+ * the iframe container — so the chat is always to its right and the
+ * tab never overlaps the surface, in either open or closed state.
+ * Background / text colour come from the active theme via inline style. */
+.demo-chat-collapsible-tab {
+  flex: 0 0 44px;
+  align-self: stretch;
+  width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px 0;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, #ff1493 0%, #c026d3 100%);
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+  /* Sit above the iframe so hover/focus states paint cleanly even though
+   * we're already a flex sibling (no actual overlap). */
+  position: relative;
+  z-index: 2;
+}
+.demo-chat-collapsible-tab:hover {
+  box-shadow: inset -4px 0 12px rgba(0, 0, 0, 0.18);
+}
+.demo-chat-collapsible-tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.demo-chat-collapsible-tab-chevron {
+  /* Lone chevron stacked under the icon — points right (= open
+   * direction) so the affordance reads as "click to slide in". */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+/* Open state: thinner, neutral so the eye lands on the chat surface
+ * instead of the tab. The chevron icon swaps in via React. */
+.demo-chat-collapsible-tab-open {
+  flex-basis: 28px;
+  width: 28px;
+  padding: 12px 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+}
+.demo-chat-collapsible-tab-open:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  box-shadow: none;
+}
+.demo-chat-collapsible-tab-open .demo-chat-collapsible-tab-icon {
+  background: transparent;
+  width: 22px;
+  height: 22px;
+}
+
+/* Hint shown beside the tab when collapsed — sits absolutely-positioned
+ * over the empty container so it doesn't fight the flex layout. */
+.demo-chat-collapsible-hint {
+  position: absolute;
+  top: 50%;
+  left: 72px;
+  right: 24px;
+  transform: translateY(-50%);
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+  z-index: 1;
+}
+.demo-chat-collapsible-hint strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
 }

@@ -12,9 +12,14 @@ const MODES: DisplayModeOption[] = [
     blurb: 'Launcher in the corner, click to open / close.',
   },
   {
+    id: 'collapsible',
+    label: 'Collapsible',
+    blurb: 'Static panel — collapses in place to a chat bubble.',
+  },
+  {
     id: 'resizable',
     label: 'Resizable',
-    blurb: 'Inline + drag the bottom-right corner to size.',
+    blurb: 'Drag the corner to size, drag the top to reposition.',
   },
 ];
 
@@ -72,6 +77,16 @@ function ModeIcon({ mode }: { mode: DisplayMode }) {
       <svg width="32" height="20" viewBox="0 0 32 20" fill="none" stroke="currentColor" strokeWidth="1.6">
         <rect x="1" y="1" width="30" height="18" rx="2" opacity="0.35" />
         <circle cx="25" cy="14" r="4" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  if (mode === 'collapsible') {
+    // Static panel with a bubble in the top-left corner — matches the
+    // collapsed state the user sees inside the chat-frame.
+    return (
+      <svg width="32" height="20" viewBox="0 0 32 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <rect x="1" y="1" width="30" height="18" rx="2" />
+        <circle cx="6" cy="6" r="3" fill="currentColor" stroke="none" />
       </svg>
     );
   }

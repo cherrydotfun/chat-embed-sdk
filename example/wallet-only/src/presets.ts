@@ -127,7 +127,7 @@ export const PRESETS: ThemePreset[] = [
       mode: 'light',
       primaryColor: '#475569',
       accentColor: '#64748b',
-      backgroundColor: '#fafafa',
+      backgroundColor: '#8c96ab',
       surfaceColor: '#f4f4f5',
       borderColor: 'rgba(24, 24, 27, 0.1)',
       textColor: '#18181b',

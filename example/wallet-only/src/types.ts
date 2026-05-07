@@ -71,14 +71,18 @@ export type PresetId = 'cherry' | 'warm' | 'light-restrained' | 'dark-restrained
  * concrete `CherryEmbedConfig` that the demo passes to `new CherryEmbed`
  * — see DemoChat.tsx for the runtime translation.
  *
- *   inline      — fills the container, no widget chrome.
- *   floating    — `position: floating-right` + `collapsed: true`. The demo
- *                 renders a launcher button; clicking it calls
- *                 `chat.toggle()` so the iframe slides in from the corner.
- *   resizable   — inline mount inside a container with `resize: both`,
- *                 letting the user drag the bottom-right corner.
+ *   inline       — fills the container, no widget chrome.
+ *   floating     — `position: floating-right` + `collapsed: true`. The demo
+ *                  renders a launcher button; clicking it calls
+ *                  `chat.toggle()` so the iframe slides in from the corner.
+ *   collapsible  — inline mount that the host hides/shows in place. A small
+ *                  bubble sits in the corner of the chat-frame; clicking it
+ *                  reveals the iframe (no fixed-position floating).
+ *   resizable    — inline mount inside a container with `resize: both`,
+ *                  letting the user drag the bottom-right corner. Also
+ *                  draggable via the handle on top of the panel.
  */
-export type DisplayMode = 'inline' | 'floating' | 'resizable';
+export type DisplayMode = 'inline' | 'floating' | 'collapsible' | 'resizable';
 
 export interface DisplayModeOption {
   id: DisplayMode;
