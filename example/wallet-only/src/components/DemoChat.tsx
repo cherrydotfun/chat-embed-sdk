@@ -254,7 +254,13 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
       )}
 
       {displayMode === 'resizable' ? (
-        <div
+        // <section> (not <div>) is deliberate: React's reconciler reuses
+        // DOM nodes across same-tag conditional branches, and the inline
+        // `width`/`height` written by the browser's `resize: both` corner
+        // grip would otherwise leak onto the next mode's container —
+        // squashing inline mode to whatever size the user dragged here.
+        // Different tag → guaranteed unmount on mode switch.
+        <section
           className="demo-chat-stage demo-chat-stage-resizable"
           style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
         >
@@ -275,7 +281,7 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
             <span className="demo-chat-drag-label">Drag</span>
           </div>
           {containerEl}
-        </div>
+        </section>
       ) : (
         containerEl
       )}
