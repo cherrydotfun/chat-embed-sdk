@@ -66,8 +66,8 @@ export const PRESETS: ThemePreset[] = [
     },
   },
   {
-    id: 'warm',
-    label: 'Warm',
+    id: 'peach',
+    label: 'Peach',
     blurb: 'Dusty rose on cream — soft, romantic, low-saturation.',
     swatches: ['#D97886', '#F2DDE0'],
     theme: {
@@ -114,13 +114,13 @@ export const PRESETS: ThemePreset[] = [
       dangerColor: '#B91C1C',
       gmColor: '#9E4E5C',
       roleBadgeColor: '#9E4E5C',
-      fontFamily: 'Poppins',
+      fontFamily: 'Outfit',
       fontSize: 'md',
     },
   },
   {
-    id: 'light-restrained',
-    label: 'Light Restrained',
+    id: 'linen',
+    label: 'Linen',
     blurb: 'Quiet slate on warm white. No neon.',
     swatches: ['#475569', '#e4e4e7'],
     theme: {
@@ -183,13 +183,13 @@ export const PRESETS: ThemePreset[] = [
       // Default amber (#FFB800) reads as bright orange on a slate-neutral
       // light surface — looks like a stray warning chip. Slate matches.
       gmColor: '#475569',
-      fontFamily: 'Inter',
+      fontFamily: 'Outfit',
       fontSize: 'md',
     },
   },
   {
-    id: 'dark-restrained',
-    label: 'Dark Restrained',
+    id: 'onyx',
+    label: 'Onyx',
     blurb: 'Charcoal monochrome, minimal saturation.',
     swatches: ['#27272a', '#a1a1aa'],
     theme: {
@@ -244,7 +244,7 @@ export const PRESETS: ThemePreset[] = [
       // Solid zinc-700 — default would inherit `mentionColor` (#d4d4d8,
       // near-white) and the white chip text would disappear on it.
       roleBadgeColor: '#3f3f46',
-      fontFamily: 'Inter',
+      fontFamily: 'Outfit',
       fontSize: 'md',
     },
   },

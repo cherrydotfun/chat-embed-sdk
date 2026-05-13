@@ -63,6 +63,32 @@ export default function App() {
   });
 
   /**
+   * On phone-width viewports, leaving the `floating` launcher (which lives
+   * pinned in the corner) means the chat surface suddenly mounts inline
+   * way below the constructor — the user clicks "Inline" and from their
+   * vantage point nothing changes, because the chat is off-screen down
+   * the page. Two-part hint: scroll the chat-frame into view, and pop a
+   * pill banner over it so the move reads as intentional.
+   */
+  const [chatBelowHint, setChatBelowHint] = useState(false);
+  const prevDisplayModeRef = useRef(displayMode);
+  useEffect(() => {
+    const prev = prevDisplayModeRef.current;
+    prevDisplayModeRef.current = displayMode;
+    if (prev === displayMode) return;
+    if (typeof window === 'undefined') return;
+    if (!window.matchMedia('(max-width: 768px)').matches) return;
+    if (prev !== 'floating' || displayMode === 'floating') return;
+
+    const frame = document.querySelector('.chat-frame');
+    if (frame) frame.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    setChatBelowHint(true);
+    const t = setTimeout(() => setChatBelowHint(false), 2500);
+    return () => clearTimeout(t);
+  }, [displayMode]);
+
+  /**
    * Tracks the last overrides snapshot we considered "settled" — once a
    * debounce window passes without further edits we push it onto the
    * history stack. Used by the snapshot effect AND by undo/redo to
@@ -210,6 +236,10 @@ export default function App() {
     <div className="page">
       <aside className="left-pane">
         <Marketing />
+        <section className="construct-intro">
+          <h2>Construct your own chat</h2>
+          <p>Pick a preset, tweak any field — the room on the right is just a live example.</p>
+        </section>
         <DisplayModeSelector selected={displayMode} onSelect={setDisplayMode} />
         <ThemeSwitcher selected={selectedPreset} onSelect={handleSelectPreset} />
         <ThemeEditor
@@ -226,6 +256,9 @@ export default function App() {
 
       <main className="right-pane">
         <div className="chat-frame">
+          {chatBelowHint && (
+            <div className="chat-below-hint" role="status">Chat moved below ↓</div>
+          )}
           {configError ? (
             <div className="chat-error">
               <h3>Could not load /config.json</h3>

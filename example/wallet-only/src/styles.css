@@ -941,3 +941,52 @@ button {
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ── Constructor intro (sits between Marketing and DisplayModeSelector) ─ */
+.construct-intro {
+  margin: 24px 0 18px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+.construct-intro h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.construct-intro p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 52ch;
+}
+
+/* ── Mobile mode-switch hint (pill banner above the chat) ──────────────
+ * Renders inside `.chat-frame` (which is `position: relative`) when the
+ * user moves OUT of the `floating` launcher on a narrow viewport. App.tsx
+ * also auto-scrolls the chat-frame into view; this pill is the secondary
+ * affordance so the move reads as intentional. Auto-clears after 2.5s. */
+.chat-below-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 50;
+  white-space: nowrap;
+  animation: chatBelowHintFade 2500ms ease forwards;
+}
+@keyframes chatBelowHintFade {
+  0%   { opacity: 0; transform: translate(-50%, -8px); }
+  10%  { opacity: 1; transform: translate(-50%, 0); }
+  85%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}
