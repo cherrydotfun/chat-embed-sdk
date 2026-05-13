@@ -19,11 +19,16 @@ interface DemoChatProps {
  * change — no debounce, so colour-picker drags update the iframe
  * frame-by-frame.
  *
- * `displayMode` selects one of three mount strategies:
- *   - inline:    iframe fills the container.
- *   - floating:  SDK floats the iframe in the viewport corner; we render
- *                a launcher button that calls `chat.toggle()`.
- *   - resizable: inline mount inside a container with `resize: both`.
+ * `displayMode` selects one of four mount strategies:
+ *   - inline:      iframe fills the container.
+ *   - floating:    SDK floats the iframe in the viewport corner; we render
+ *                  a launcher button that calls `chat.toggle()`.
+ *   - collapsible: inline mount that the host hides/shows in place. A small
+ *                  bubble in the corner of the chat-frame toggles
+ *                  visibility — same iframe, different chrome.
+ *   - resizable:   inline mount inside a container with `resize: both`,
+ *                  with a draggable handle on top so the panel can be
+ *                  repositioned within the chat-frame.
  *
  * Switching mode triggers a remount because `position` / `collapsed`
  * live in the SDK's mount-time config — they are not runtime commands.
@@ -39,6 +44,22 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
   // wants a fresh slate.
   const prevTriggerRef = useRef<number>(resetTrigger);
   const [floatingOpen, setFloatingOpen] = useState(false);
+  // Collapsible mode starts closed so visitors land on the bubble-only
+  // state — that's the "feature" the mode is showing off; the iframe is
+  // mounted under the hood and revealed on click.
+  const [collapsibleOpen, setCollapsibleOpen] = useState(false);
+  /**
+   * Translation offset for resizable mode. The drag handle on top of the
+   * panel updates this; the wrapper applies it via `transform: translate`
+   * so flex layout under it stays untouched. Reset on every mode switch.
+   */
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragStateRef = useRef<{
+    pointerX: number;
+    pointerY: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
 
   // Mount / unmount whenever the SDK's mount-time config changes.
   // displayMode flips `position` + `collapsed` so it joins the deps.
@@ -48,6 +69,8 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
 
     let cancelled = false;
     setFloatingOpen(false);
+    setCollapsibleOpen(false);
+    setDragOffset({ x: 0, y: 0 });
 
     (async () => {
       try {
@@ -116,9 +139,44 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
     setFloatingOpen((o) => !o);
   }, []);
 
+  const toggleCollapsible = useCallback(() => {
+    setCollapsibleOpen((o) => !o);
+  }, []);
+
+  // Drag handlers for the resizable-mode handle. Pointer events + capture
+  // so we still get move/up after the cursor leaves the handle bounds.
+  const onDragStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragStateRef.current = {
+        pointerX: e.clientX,
+        pointerY: e.clientY,
+        offsetX: dragOffset.x,
+        offsetY: dragOffset.y,
+      };
+    },
+    [dragOffset],
+  );
+  const onDragMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const start = dragStateRef.current;
+    if (!start) return;
+    setDragOffset({
+      x: start.offsetX + (e.clientX - start.pointerX),
+      y: start.offsetY + (e.clientY - start.pointerY),
+    });
+  }, []);
+  const onDragEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    dragStateRef.current = null;
+  }, []);
+
   /**
-   * The launcher's background tracks the active theme so it always
-   * "belongs" to the palette behind it. Priority:
+   * Theme-driven launcher style — used by both the floating launcher and
+   * the collapsible bubble so they always belong to the active palette.
+   * Priority:
    *   1. an explicit own-bubble fill (solid colour the user picked),
    *   2. the primary→accent gradient the bubbles use by default,
    *   3. fallback to Cherry's pink→purple gradient (CSS default).
@@ -126,7 +184,6 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
    * ring picks up the same hue.
    */
   const launcherStyle = useMemo<React.CSSProperties>(() => {
-    if (displayMode !== 'floating') return {};
     const style: React.CSSProperties & Record<string, string> = {};
     if (theme.ownBubbleColor) {
       style.background = theme.ownBubbleColor;
@@ -139,14 +196,96 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
       style['--launcher-pulse'] = theme.primaryColor;
     }
     return style;
-  }, [displayMode, theme.ownBubbleColor, theme.ownBubbleTextColor, theme.primaryColor, theme.accentColor]);
+  }, [theme.ownBubbleColor, theme.ownBubbleTextColor, theme.primaryColor, theme.accentColor]);
+
+  const containerClassName = useMemo(() => {
+    const parts = ['demo-chat-container', `demo-chat-${displayMode}`];
+    if (displayMode === 'collapsible') {
+      parts.push(
+        collapsibleOpen
+          ? 'demo-chat-collapsible-open'
+          : 'demo-chat-collapsible-closed',
+      );
+    }
+    return parts.join(' ');
+  }, [displayMode, collapsibleOpen]);
+
+  const containerEl = (
+    <div ref={containerRef} className={containerClassName} />
+  );
 
   return (
     <>
-      <div
-        ref={containerRef}
-        className={`demo-chat-container demo-chat-${displayMode}`}
-      />
+      {/* Collapsible tab renders FIRST so it's the left flex sibling of
+       * the iframe container — that way it never overlays the chat
+       * surface, regardless of open/closed state. */}
+      {displayMode === 'collapsible' && (
+        <button
+          type="button"
+          className={`demo-chat-collapsible-tab${collapsibleOpen ? ' demo-chat-collapsible-tab-open' : ''}`}
+          onClick={toggleCollapsible}
+          aria-label={collapsibleOpen ? 'Collapse chat' : 'Expand chat'}
+          title={collapsibleOpen ? 'Collapse chat' : 'Expand chat'}
+          style={collapsibleOpen ? undefined : launcherStyle}
+        >
+          <span className="demo-chat-collapsible-tab-icon" aria-hidden="true">
+            {collapsibleOpen ? (
+              /* chevron-left for the open state — collapse direction */
+              <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 4 L6 8 L10 12" />
+              </svg>
+            ) : (
+              /* chat-bubble icon — the closed-state affordance */
+              <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 5 a2 2 0 0 1 2-2 h10 a2 2 0 0 1 2 2 v7 a2 2 0 0 1 -2 2 h-5 l-3 3 v-3 h-2 a2 2 0 0 1 -2 -2 z" />
+              </svg>
+            )}
+          </span>
+          {!collapsibleOpen && (
+            <span className="demo-chat-collapsible-tab-chevron" aria-hidden="true">
+              {/* Chevron-right under the bubble icon — points in the
+               * direction the chat will slide on click. */}
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 4 L10 8 L6 12" />
+              </svg>
+            </span>
+          )}
+        </button>
+      )}
+
+      {displayMode === 'resizable' ? (
+        // <section> (not <div>) is deliberate: React's reconciler reuses
+        // DOM nodes across same-tag conditional branches, and the inline
+        // `width`/`height` written by the browser's `resize: both` corner
+        // grip would otherwise leak onto the next mode's container —
+        // squashing inline mode to whatever size the user dragged here.
+        // Different tag → guaranteed unmount on mode switch.
+        <section
+          className="demo-chat-stage demo-chat-stage-resizable"
+          style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
+        >
+          <div
+            className="demo-chat-drag-handle"
+            onPointerDown={onDragStart}
+            onPointerMove={onDragMove}
+            onPointerUp={onDragEnd}
+            onPointerCancel={onDragEnd}
+            role="button"
+            aria-label="Drag to reposition the chat panel"
+            title="Drag to reposition"
+          >
+            <span className="demo-chat-drag-grip" aria-hidden="true">
+              <span />
+              <span />
+            </span>
+            <span className="demo-chat-drag-label">Drag</span>
+          </div>
+          {containerEl}
+        </section>
+      ) : (
+        containerEl
+      )}
+
       {displayMode === 'floating' && (
         <>
           <button
@@ -168,6 +307,16 @@ export function DemoChat({ config, theme, resetTrigger, displayMode }: DemoChatP
             </div>
           )}
         </>
+      )}
+
+      {displayMode === 'collapsible' && !collapsibleOpen && (
+        <div className="demo-chat-collapsible-hint">
+          <strong>Collapsible mode</strong>
+          <span>
+            The widget is mounted in place. Click the tab on the left
+            to slide the chat in.
+          </span>
+        </div>
       )}
     </>
   );

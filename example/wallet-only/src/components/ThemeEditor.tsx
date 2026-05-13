@@ -235,7 +235,7 @@ export function ThemeEditor({
         </div>
       </details>
 
-      <details className="editor-group" open>
+      <details className="editor-group">
         <summary>Background &amp; Text</summary>
         <div className="editor-fields">
           {c('Page background', 'backgroundColor')}
@@ -248,7 +248,7 @@ export function ThemeEditor({
         </div>
       </details>
 
-      <details className="editor-group" open>
+      <details className="editor-group">
         <summary>Header</summary>
         <div className="editor-fields">
           {c('Header background', 'headerColor')}
@@ -277,7 +277,7 @@ export function ThemeEditor({
         </div>
       </details>
 
-      <details className="editor-group" open>
+      <details className="editor-group">
         <summary>Embeds &amp; per-side accents</summary>
         <div className="editor-fields">
           {c('Own-side embed background', 'ownEmbedBgColor', 'All embed cards on own bubbles (token / link / group / reply quote). Defaults to a shade of own bubble.')}
