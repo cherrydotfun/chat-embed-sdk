@@ -138,6 +138,20 @@ export interface EmbedLayout {
 
 export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
 
+/**
+ * Embed display mode.
+ *
+ * - `'single'` (default) — embed is locked to the `roomId` set at construction
+ *   time; room navigation inside the iframe is disabled.
+ * - `'external-controlled'` — the host drives room navigation via `setRoom()`;
+ *   the iframe exposes a room-list UI but defers navigation decisions to the
+ *   host. The iframe emits `roomChanged` events when the user selects a room.
+ * - `'list'` — the iframe renders its full room-list UI and the user can
+ *   navigate freely; the host receives `roomChanged` events but does not need
+ *   to call `setRoom()` itself.
+ */
+export type EmbedMode = 'single' | 'external-controlled' | 'list';
+
 export interface CherryEmbedConfig {
   appId: string;
   container: HTMLElement | string;
@@ -146,6 +160,12 @@ export interface CherryEmbedConfig {
    *  available before the first `signChallenge` request arrives. */
   walletAddress?: string;
   roomId?: string;
+  /**
+   * Embed display mode. Controls whether the iframe shows a single room,
+   * a list, or hands room navigation control to the host.
+   * Defaults to `'single'`.
+   */
+  mode?: EmbedMode;
   theme?: EmbedTheme;
   layout?: EmbedLayout;
   position?: 'inline' | 'floating-right' | 'floating-left';
@@ -179,6 +199,16 @@ export type EmbedEventMap = {
    * no JWT yet). Useful for host UI to show a "Sign in" prompt nearby.
    */
   preview: { visible: boolean; gated: boolean };
+  /**
+   * Emitted by the iframe whenever the active room changes.
+   *
+   * In `'external-controlled'` mode the host drives navigation via
+   * `setRoom()` and should listen to this event to keep its own state in
+   * sync. In `'list'` mode the user navigates freely and the host can use
+   * this event as a notification. In `'single'` mode this event is not
+   * expected to fire unless the server overrides the mode.
+   */
+  roomChanged: { roomId: string };
 };
 
 // Bridge protocol messages (host <-> iframe)

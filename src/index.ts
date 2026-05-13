@@ -1,6 +1,7 @@
 export { CherryEmbed } from './embed';
 export type {
   CherryEmbedConfig,
+  EmbedMode,
   EmbedTheme,
   EmbedLayout,
   EmbedEventMap,

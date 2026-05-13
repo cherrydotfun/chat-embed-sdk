@@ -4,6 +4,7 @@ import type {
   CherryEmbedConfig,
   EmbedEventMap,
   EmbedLayout,
+  EmbedMode,
   EmbedTheme,
   SignChallengeHandler,
 } from './types';
@@ -38,6 +39,7 @@ export class CherryEmbed {
   private _isReady = false;
   private _isAuthenticated = false;
   private _isVisible = true;
+  private readonly _mode: EmbedMode;
 
   /** Current wallet address (may be set before or after mount). */
   private _walletAddress: string | undefined;
@@ -47,6 +49,7 @@ export class CherryEmbed {
     if (!config.appId) throw new Error('CherryEmbed: appId is required');
     if (!config.container) throw new Error('CherryEmbed: container is required');
     this.config = config;
+    this._mode = config.mode ?? 'single';
     this._walletAddress = config.walletAddress;
     this.signChallengeHandler = config.signChallengeHandler;
   }
@@ -63,6 +66,7 @@ export class CherryEmbed {
     this.iframe = createEmbedIframe({
       appId: this.config.appId,
       roomId: this.config.roomId,
+      mode: this._mode,
       embedUrl: this.config.embedUrl,
       container: this.containerEl,
       position: this.config.position ?? 'inline',
@@ -317,6 +321,11 @@ export class CherryEmbed {
     return this._walletAddress;
   }
 
+  /** The embed mode resolved at construction time (defaults to `'single'`). */
+  get currentMode(): EmbedMode {
+    return this._mode;
+  }
+
   // ---- Private ----
 
   private emit(event: string, data?: unknown): void {
@@ -341,6 +350,7 @@ export class CherryEmbed {
       'error',
       'walletConnectRequested',
       'preview',
+      'roomChanged',
     ];
 
     for (const event of events) {

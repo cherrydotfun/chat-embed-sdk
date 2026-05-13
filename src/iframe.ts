@@ -3,6 +3,7 @@ const DEFAULT_EMBED_URL = 'https://embed.cherry.fun';
 export function createEmbedIframe(config: {
   appId: string;
   roomId?: string;
+  mode?: string;
   embedUrl?: string;
   container: HTMLElement;
   position: 'inline' | 'floating-right' | 'floating-left';
@@ -13,6 +14,7 @@ export function createEmbedIframe(config: {
   const url = new URL('/', config.embedUrl || DEFAULT_EMBED_URL);
   url.searchParams.set('appId', config.appId);
   if (config.roomId) url.searchParams.set('roomId', config.roomId);
+  if (config.mode) url.searchParams.set('mode', config.mode);
   iframe.src = url.toString();
 
   // Security attributes
