@@ -251,7 +251,7 @@ export const PRESETS: ThemePreset[] = [
   {
     id: 'solflare',
     label: 'Solflare',
-    blurb: 'Solflare — #ffef46 yellow on near-black, gray incoming, FK Grotesk. No gradients.',
+    blurb: 'Signature yellow on near-black — bold, minimal, high-contrast.',
     swatches: ['#ffef46', '#16181c'],
     theme: {
       mode: 'dark',
