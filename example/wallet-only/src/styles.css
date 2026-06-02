@@ -1,3 +1,13 @@
+/* Self-hosted FK Grotesk — Solflare's brand typeface. Used by the Solflare
+   theme preset (fontFamily: 'FK Grotesk'). Sourced from solflare.com. */
+@font-face {
+  font-family: 'FK Grotesk';
+  src: url('./fonts/FKGrotesk.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --page-bg: #0b0b10;
   --pane-bg: #14141c;
