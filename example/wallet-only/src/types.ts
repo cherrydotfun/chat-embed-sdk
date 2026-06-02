@@ -64,7 +64,7 @@ export interface EmbedTheme {
   fontSize?: 'sm' | 'md' | 'lg';
 }
 
-export type PresetId = 'cherry' | 'peach' | 'linen' | 'onyx';
+export type PresetId = 'cherry' | 'peach' | 'linen' | 'onyx' | 'solflare' | 'jupiter';
 
 /**
  * How the chat surface mounts inside the host page. Each value maps to a

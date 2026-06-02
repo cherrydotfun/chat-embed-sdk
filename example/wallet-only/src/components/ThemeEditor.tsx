@@ -116,6 +116,7 @@ function ColorField({
 const FONTS = [
   'Outfit',
   'Inter',
+  'Space Grotesk',
   'Roboto',
   'Open Sans',
   'Lato',
