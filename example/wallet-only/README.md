@@ -6,8 +6,8 @@ the host page. The iframe handles wallet connect and signature itself.
 
 This page also doubles as a **theme playground**:
 
-- Four built-in presets (Cherry / Light Fun / Light Restrained / Dark
-  Restrained).
+- Six built-in presets (Cherry / Peach / Linen / Onyx / Solflare /
+  Jupiter).
 - A live constructor for every individual colour, font, and shape token
   exposed by `EmbedTheme`.
 - Edits travel the postMessage bridge in ~50 ms — no reload, nothing
@@ -29,7 +29,8 @@ bun install
 bun run dev
 ```
 
-Open <http://localhost:8088>. The Vite middleware serves both the SPA and
+Open <http://localhost:3000> (the shared root `.env` sets `PORT=3000`;
+without a `.env` the dev server falls back to 8088). The Vite middleware serves both the SPA and
 the same `/config.json` + `/cherry-embed.js` endpoints that production
 does, so the demo is self-contained — you do not need to run `node
 server.js` in dev.
@@ -56,7 +57,7 @@ static host (nginx, S3, Vercel) that can also expose `/config.json` and
 APP_ID=your_app_id_here
 CHERRY_EMBED_URL=https://embed.cherry.fun   # or http://localhost:3002 for local Cherry
 ROOM_ID=                                    # optional — preselect a room
-PORT=8088                                    # demo HTTP port
+PORT=3000                                    # demo HTTP port
 ```
 
 `APP_SECRET` is **not used** here.
@@ -66,11 +67,11 @@ PORT=8088                                    # demo HTTP port
 - `index.html` — Vite entry. Loads `/cherry-embed.js` from the same origin.
 - `src/main.tsx`, `src/App.tsx` — SPA root + state management.
 - `src/components/Marketing.tsx` — sales copy + integration snippet.
-- `src/components/ThemeSwitcher.tsx` — four preset cards.
+- `src/components/ThemeSwitcher.tsx` — the preset cards.
 - `src/components/ThemeEditor.tsx` — collapsible per-token constructor.
 - `src/components/DemoChat.tsx` — wraps `CherryEmbedSDK.CherryEmbed`,
   pushes theme changes via debounced `setTheme(...)`.
-- `src/presets.ts` — the four starter themes.
+- `src/presets.ts` — the starter themes.
 - `vite.config.ts` — dev middleware exposing `/config.json` and
   `/cherry-embed.js`.
 - `server.js` — production server (post-build).
@@ -80,6 +81,8 @@ PORT=8088                                    # demo HTTP port
 - Public rooms only — wallet-only does not support gated rooms with
   per-user access lists (the embed app's `allowedRoomIds` setting applies
   globally for all users).
-- Cherry JWT is short-lived (~15 min); the user signs again per session.
+- Cherry JWT is short-lived (~15 min); the iframe renews it silently via a
+  rotating refresh token, so the user only re-signs after ~30 days of
+  inactivity or revocation.
 - No per-user customisation from host (rate limits, role hints, etc.).
 - All theme overrides are in-memory: a refresh wipes them.

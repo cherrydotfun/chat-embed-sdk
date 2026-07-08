@@ -11,18 +11,15 @@ Two recommended integration modes:
 
 The simplest setup. **No backend, no host wallet code.** The iframe shows its own "Connect Wallet" button and runs the entire Phantom/Solflare/Backpack flow internally.
 
-### 1. Register your app
+### 1. Create your embed (self-serve)
 
-Contact the Cherry team and provide:
+Sign in at [portal.cherry.fun](https://portal.cherry.fun) with your Solana wallet (SIWS), create a **Project**, then open **Chat embeds** → **New embed**:
 
-| Field | Value |
-|---|---|
-| **App Name** | Display name, e.g. `My Site Chat` |
-| **Auth Mode** | `wallet-only` |
-| **Allowed Origins** | Exact origins where the chat will be embedded, e.g. `https://yoursite.com` (no wildcards — list each subdomain separately) |
-| **Allowed Room IDs** | One or more public room IDs to expose (or leave empty for all public rooms) |
+1. Copy the **embed ID** — this is your `appId` (public, safe to expose in client JS).
+2. Under **Allowed origins**, add the exact origins where the chat will be embedded, e.g. `https://yoursite.com` (no wildcards — list each subdomain separately, plus your dev origin such as `http://localhost:3000`).
+3. Make sure the embed is **enabled**.
 
-In response you will receive a public `appId`. The `App Secret` is **not used** in wallet-only mode — you don't need it.
+The app secret is **not used** in wallet-only mode — you don't need it.
 
 ### 2. Install the SDK
 
@@ -30,7 +27,8 @@ In response you will receive a public `appId`. The `App Secret` is **not used** 
 npm install @cherrydotfun/chat-embed-sdk
 ```
 
-> CDN distribution is not available yet — use the npm package.
+> No build step? Load it from jsDelivr instead — the bundle exposes `window.CherryEmbedSDK`:
+> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>`
 
 ### 3. Mount the chat
 
@@ -38,9 +36,9 @@ npm install @cherrydotfun/chat-embed-sdk
 import { CherryEmbed } from '@cherrydotfun/chat-embed-sdk';
 
 const chat = new CherryEmbed({
-  appId: 'your-app-id',               // provided by Cherry team
+  appId: 'your-app-id',               // embed ID from portal.cherry.fun
   container: '#chat',                 // CSS selector or HTMLElement
-  roomId: 'optional-public-room-id',  // omit to show the room list
+  roomId: 'optional-public-room-id',
 });
 
 await chat.mount();
@@ -58,7 +56,7 @@ That's the whole integration. No `token`, no `walletAddress`, no `signChallengeH
 2. To send a message, user clicks **Connect wallet** inside the iframe.
 3. Wallet-adapter modal lists installed wallets → user picks one.
 4. Phantom popup (connect) → Phantom popup (sign challenge) → authenticated.
-5. Cherry JWT is cached in the iframe's sessionStorage (~15 min); user re-signs next session.
+5. The Cherry JWT is cached in the iframe's sessionStorage (~15 min). Alongside it, the iframe stores a rotating refresh token (~30-day TTL, keyed per app + wallet in its own origin-isolated localStorage) and silently re-establishes the session when the iframe (re)loads — the user only re-signs after ~30 days of inactivity or revocation.
 
 ### Limitations of wallet-only mode
 
@@ -68,11 +66,11 @@ That's the whole integration. No `token`, no `walletAddress`, no `signChallengeH
 
 ### Common pitfalls
 
-- **"Origin mismatch"** — make sure the exact origin (scheme + host + port) was provided to the Cherry team.
+- **"Origin mismatch"** — make sure the exact origin (scheme + host + port) is in your embed's **Allowed origins** at portal.cherry.fun.
 - **"Room not found"** — `roomId` must be public and (if a room allowlist is configured) included in it.
 - **CSP** — if your site uses Content-Security-Policy, allow `frame-src https://embed.cherry.fun`.
 
-Working example to copy: `cherry-embed-sdk/example/wallet-only/`.
+Working example to copy: [`example/wallet-only/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/wallet-only) (in the `chat-embed-sdk` repo).
 
 ---
 
@@ -80,21 +78,14 @@ Working example to copy: `cherry-embed-sdk/example/wallet-only/`.
 
 Recommended mode for **public 3rd-party integrations**. Requires a small backend on your side, plus host-side wallet connection. The user gets two wallet popups: one to connect, one to sign a challenge — proving both that your app is legitimate (backend HMAC) and that the user controls the wallet (Ed25519 signature).
 
-### 1. Register your app
+### 1. Create your embed (self-serve)
 
-Contact the Cherry team and provide:
+Sign in at [portal.cherry.fun](https://portal.cherry.fun) with your Solana wallet (SIWS), create a **Project**, then open **Chat embeds** → **New embed** with auth mode `app-trusted+wallet`:
 
-| Field | Value |
-|---|---|
-| **App Name** | Display name, e.g. `My Site Chat` |
-| **Auth Mode** | `app-trusted+wallet` |
-| **Allowed Origins** | Exact origins where the chat will be embedded, e.g. `https://yoursite.com` (no wildcards — list each subdomain separately) |
-| **Allowed Room IDs** | One or more public room IDs to expose (or leave empty for all public rooms) |
-
-In response you will receive:
-
-- a public `appId`
-- a private `appSecret` — **keep it server-side only**, never ship to the browser
+1. Copy the **embed ID** — this is your public `appId`.
+2. Copy the **app secret** — **keep it server-side only**, never ship to the browser.
+3. Under **Allowed origins**, add the exact origins where the chat will be embedded, e.g. `https://yoursite.com` (no wildcards — list each subdomain separately).
+4. Make sure the embed is **enabled**.
 
 ### 2. Install the SDK
 
@@ -102,7 +93,8 @@ In response you will receive:
 npm install @cherrydotfun/chat-embed-sdk
 ```
 
-> CDN distribution is not available yet — use the npm package.
+> No build step? Load it from jsDelivr instead — the bundle exposes `window.CherryEmbedSDK`:
+> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>`
 
 You will also need a JWT library on the backend, e.g. `jsonwebtoken`:
 
@@ -169,16 +161,10 @@ async function initChat() {
   });
 
   await chat.mount();
-
-  // 4. Refresh token when it expires (~5 min embed token, ~15 min Cherry JWT)
-  chat.on('tokenExpired', async () => {
-    const { token: fresh } = await fetch('/api/embed-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ walletAddress }),
-    }).then((r) => r.json());
-    chat.setToken(fresh);
-  });
+  // Session renewal is automatic: the iframe silently re-establishes its
+  // Cherry session from a rotating refresh token when it (re)loads. If you
+  // ever need to force a fresh exchange (e.g. after the user switches
+  // accounts), mint a new embed token and call chat.setToken(fresh).
 }
 
 initChat();
@@ -204,20 +190,20 @@ Two popups total (connect + sign) — this is expected, not a bug.
 - **embedToken** (HS256 over `appSecret`) — proves your backend is legitimate.
 - **wallet signature** (Ed25519 over a Cherry-issued challenge bound to `appId` + `walletAddress` + parent origin) — proves the user controls the wallet.
 - A leaked `appSecret` alone is not enough to impersonate users — wallet key is also required.
-- Rotate `appSecret` periodically (ask the Cherry team). The previous secret stays valid for one rotation cycle, then is evicted.
+- Rotate `appSecret` in your embed's settings at portal.cherry.fun. Rotation is an immediate hard cutover — the old secret is invalidated instantly, so embedTokens signed with it (and live sessions relying on refresh) fail right away. Rotate at a quiet moment and start minting tokens with the new secret immediately.
 
 ### Limitations
 
 - **Public rooms only** for embed flows — no DM / encrypted-group access.
-- Embed token expires in 5 minutes — handle `tokenExpired` to refresh.
-- Cherry JWT expires in ~15 minutes — SDK re-exchanges automatically using your fresh token.
+- Embed token expires in 5 minutes — mint it fresh right before `mount()`, don't cache it.
+- Cherry JWT expires in ~15 minutes — the iframe re-establishes the session automatically from its rotating refresh token on (re)load.
 
 ### Common pitfalls
 
-- **"Origin mismatch"** — make sure the exact origin (scheme + host + port) was provided to the Cherry team.
+- **"Origin mismatch"** — make sure the exact origin (scheme + host + port) is in your embed's **Allowed origins** at portal.cherry.fun.
 - **"Invalid or expired token"** — check `APP_SECRET` matches what Cherry issued; ensure `jti` is unique per token; don't cache tokens.
 - **Wallet popup never appears** — `signChallengeHandler` must be passed in the constructor (not added after `mount()`), otherwise the initial challenge fires before the handler is registered.
 - **Production identity** — derive `walletAddress` from your own server-side session, never trust it from the request body.
 - **CSP** — allow `frame-src https://embed.cherry.fun`.
 
-Working example to copy: `cherry-embed-sdk/example/app-trusted+wallet/`.
+Working example to copy: [`example/app-trusted+wallet/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/app-trusted%2Bwallet) (in the `chat-embed-sdk` repo).

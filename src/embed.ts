@@ -47,7 +47,11 @@ export class CherryEmbed {
 
   constructor(config: CherryEmbedConfig) {
     if (!config.appId) throw new Error('CherryEmbed: appId is required');
-    if (!config.container) throw new Error('CherryEmbed: container is required');
+    // Floating widgets mount to document.body, so `container` is only
+    // required for inline embeds.
+    if ((config.position ?? 'inline') === 'inline' && !config.container) {
+      throw new Error('CherryEmbed: container is required for inline embeds');
+    }
     this.config = config;
     this._mode = config.mode ?? 'single';
     this._walletAddress = config.walletAddress;
@@ -55,12 +59,19 @@ export class CherryEmbed {
   }
 
   async mount(): Promise<void> {
-    // 1. Resolve container
-    this.containerEl =
-      typeof this.config.container === 'string'
-        ? document.querySelector<HTMLElement>(this.config.container)
-        : this.config.container;
-    if (!this.containerEl) throw new Error('CherryEmbed: container not found');
+    // 1. Resolve container. Floating widgets may omit it and mount to body.
+    if (this.config.container) {
+      this.containerEl =
+        typeof this.config.container === 'string'
+          ? document.querySelector<HTMLElement>(this.config.container)
+          : this.config.container;
+      if (!this.containerEl) throw new Error('CherryEmbed: container not found');
+    } else {
+      if (!document.body) {
+        throw new Error('CherryEmbed: document.body is not available — call mount() after DOMContentLoaded');
+      }
+      this.containerEl = document.body;
+    }
 
     // 2. Create iframe
     this.iframe = createEmbedIframe({
@@ -93,12 +104,12 @@ export class CherryEmbed {
     this.setupEventForwarding();
 
     // 5. Re-apply config on EVERY `ready` event, not just the first one.
-    //    The iframe may reload itself (e.g. after the initial embed-token →
-    //    Cherry JWT exchange calls `window.location.reload()`), which wipes
-    //    theme/layout state inside the iframe. Without this, only server-side
-    //    defaults would survive the reload. `auth.token` is idempotent on the
-    //    iframe side (it no-ops if a valid JWT is already stored), unless
-    //    `force: true` is passed — see `setToken()`.
+    //    The iframe may reload itself in fallback paths (missing client
+    //    during boot, wallet switch, or a failed client.initialize()),
+    //    which wipes theme/layout state inside the iframe. Without this,
+    //    only server-side defaults would survive the reload. `auth.token`
+    //    is idempotent on the iframe side (it no-ops if a valid JWT is
+    //    already stored), unless `force: true` is passed — see `setToken()`.
     this.bridge.onEvent('ready', () => this.sendInitConfigs());
 
     // 6. Wait for ready event with timeout. `sendInitConfigs()` will already
@@ -182,9 +193,9 @@ export class CherryEmbed {
     (this.config as { token?: string }).token = token;
     // `force: true` tells the iframe to discard any existing JWT and exchange
     // this embed token again. Without it, the iframe would skip re-exchange
-    // because a JWT is already in localStorage — which is exactly the behavior
-    // we want for the regular `ready` re-send path, but NOT for explicit
-    // refresh via setToken (which is called in response to `tokenExpired`).
+    // because a JWT is already in its sessionStorage — which is exactly the
+    // behavior we want for the regular `ready` re-send path, but NOT for an
+    // explicit refresh via setToken.
     this.bridge?.sendCommand('auth.token', { token, force: true });
   }
 

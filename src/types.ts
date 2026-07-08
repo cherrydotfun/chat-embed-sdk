@@ -129,10 +129,14 @@ export interface EmbedLayout {
   showHeader?: boolean;
   headerTitle?: string;
   showMemberCount?: boolean;
+  /** @deprecated Ignored by the embed runtime (its layout sanitizer drops it). */
   showAvatars?: boolean;
+  /** @deprecated Ignored by the embed runtime (its layout sanitizer drops it). */
   showTimestamps?: boolean;
+  /** @deprecated Ignored by the embed runtime (its layout sanitizer drops it). */
   showReactions?: boolean;
   showInput?: boolean;
+  /** @deprecated Ignored by the embed runtime; size the container element instead. */
   maxHeight?: string;
 }
 
@@ -149,12 +153,21 @@ export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
  * - `'list'` — the iframe renders its full room-list UI and the user can
  *   navigate freely; the host receives `roomChanged` events but does not need
  *   to call `setRoom()` itself.
+ *
+ * NOTE: the embed runtime currently only implements `'single'`. Passing
+ * `'external-controlled'` or `'list'` yields single-room behavior until the
+ * runtime ships those modes.
  */
 export type EmbedMode = 'single' | 'external-controlled' | 'list';
 
 export interface CherryEmbedConfig {
   appId: string;
-  container: HTMLElement | string;
+  /**
+   * Mount target: a DOM element or CSS selector. Required for `inline`
+   * embeds. Omit for `floating-right` / `floating-left` — the widget then
+   * mounts to `document.body`.
+   */
+  container?: HTMLElement | string;
   token?: string;
   /** Optional wallet address. Forwarded to iframe on mount so it is
    *  available before the first `signChallenge` request arrives. */
@@ -183,15 +196,24 @@ export type EmbedEventMap = {
   unreadCount: number;
   message: { roomId: string; senderId: string; timestamp: number };
   authStateChange: boolean;
+  /**
+   * NOTE: not currently emitted by the embed runtime — the iframe
+   * re-establishes sessions silently from a rotating refresh token when it
+   * loads. Kept for forward compatibility.
+   */
   tokenExpired: void;
+  /**
+   * NOTE: not currently emitted by the embed runtime. Kept for forward
+   * compatibility.
+   */
   error: { code: string; message: string };
   /**
    * Iframe requests host to initiate sign-in / wallet connect.
    * Emitted when the user clicks send/react in preview (read-only) mode,
    * or clicks an explicit "Connect wallet" CTA inside the iframe.
-   * Host should respond by:
-   *   - app-trusted: fetch embedToken from backend, call chat.setToken(token)
-   *   - app-trusted+wallet / wallet-only: trigger wallet.connect, call chat.setWalletAddress(addr)
+   * Host should respond by triggering wallet.connect and calling
+   * chat.setWalletAddress(addr) (and chat.setToken(token) for
+   * backend-token auth).
    */
   walletConnectRequested: void;
   /**
@@ -207,6 +229,10 @@ export type EmbedEventMap = {
    * sync. In `'list'` mode the user navigates freely and the host can use
    * this event as a notification. In `'single'` mode this event is not
    * expected to fire unless the server overrides the mode.
+   *
+   * NOTE: not currently emitted by the embed runtime — only `'single'`
+   * mode is implemented today, so this event never fires. Kept for
+   * forward compatibility.
    */
   roomChanged: { roomId: string };
 };

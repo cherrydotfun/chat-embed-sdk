@@ -45,7 +45,7 @@ export function Marketing() {
         <div className="marketing-card">
           <div className="marketing-card-title">Themable end-to-end</div>
           <p className="marketing-card-body">
-            Pick one of the four presets below or twist any individual colour
+            Pick one of the presets below or twist any individual colour
             or font live.
           </p>
         </div>
@@ -69,10 +69,10 @@ export function Marketing() {
       <details className="marketing-snippet">
         <summary>Show the integration snippet</summary>
         <pre>
-          <code>{`<script src="https://cdn.cherry.fun/embed/cherry-embed.js"></script>
+          <code>{`<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>
 <div id="chat"></div>
 <script>
-  new CherryEmbedSDK.CherryEmbed({
+  new window.CherryEmbedSDK.CherryEmbed({
     appId: 'your-app-id',
     container: '#chat',
     roomId: 'room-id',         // optional

@@ -25,7 +25,7 @@
  *     | -- POST /api/embed/auth { embedToken, sig } >|
  *     | <-- Cherry JWT ----------------------------- |
  *
- * This file is intentionally a copy of app-trusted/server.js.
+ * This example is intentionally self-contained.
  * Self-containedness is more important than DRY for example code.
  */
 
@@ -39,7 +39,7 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-// Prefer a dedicated env var so the three examples can share a single .env.
+// Prefer a dedicated env var so the examples can share a single .env.
 const APP_ID =
   process.env.APP_WALLET_ID ||
   process.env.APP_ID ||
