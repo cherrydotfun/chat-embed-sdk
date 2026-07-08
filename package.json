@@ -1,7 +1,7 @@
 {
   "name": "@cherrydotfun/chat-embed-sdk",
-  "version": "0.1.4",
-  "description": "Embed Cherry Chat public rooms into any website. Zero-signature auth, full theming, lightweight iframe-based.",
+  "version": "0.1.5",
+  "description": "Embed Cherry Chat public rooms into any website. Wallet-based auth, full theming, lightweight iframe-based.",
   "license": "MIT",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -41,9 +41,9 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/nicefun/chat-embed-sdk"
+    "url": "git+https://github.com/cherrydotfun/chat-embed-sdk.git"
   },
-  "homepage": "https://cherry.fun",
+  "homepage": "https://portal.cherry.fun",
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.9",
     "jsdom": "^29.1.0",

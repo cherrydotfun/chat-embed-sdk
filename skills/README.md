@@ -6,13 +6,13 @@ AI-powered integration assistant for `@cherrydotfun/chat-embed-sdk`.
 
 ### `cherry-embed-integration`
 
-Guides you through embedding a Cherry Chat public room into an existing web3 Solana application with zero-signature authentication.
+Guides you through embedding a Cherry Chat public room into an existing web3 Solana application with wallet-based authentication.
 
 The skill:
 1. Analyzes your project (framework, wallet setup, backend)
-2. Creates a backend endpoint to generate embed tokens
+2. Creates a backend token endpoint when using `app-trusted+wallet` auth
 3. Mounts the chat widget with custom theming
-4. Sets up token refresh and event handling
+4. Sets up event handling
 5. Verifies the integration end-to-end
 
 ## Installation

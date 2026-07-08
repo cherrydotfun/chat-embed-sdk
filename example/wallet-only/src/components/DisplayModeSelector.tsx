@@ -29,7 +29,7 @@ interface DisplayModeSelectorProps {
 }
 
 /**
- * Three concrete mount strategies for the chat iframe. Switching reuses
+ * Concrete mount strategies for the chat iframe. Switching reuses
  * the same SDK config surface (`position`, `collapsed`, `chat.toggle()`)
  * so people can see the off-the-shelf options without reading the docs.
  */

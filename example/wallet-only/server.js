@@ -79,8 +79,9 @@ router.get('/config.json', (_req, res) => {
 });
 
 // Embed SDK IIFE bundle — proxied from the local SDK build so the demo
-// works without a CDN. Production deploys can point at https://cdn.cherry.fun
-// instead by editing index.html.
+// works without a CDN. Production deploys can instead load the published
+// bundle from jsDelivr (https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk)
+// by editing index.html.
 router.get('/cherry-embed.js', (_req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.sendFile(SDK_BUNDLE);

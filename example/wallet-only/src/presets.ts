@@ -1,7 +1,7 @@
 import type { ThemePreset } from './types';
 
 /**
- * Four starter themes. Each preset is a complete EmbedTheme — the demo
+ * The starter themes. Each preset is a complete EmbedTheme — the demo
  * reaches `cherry` by sending `{}` so the iframe falls through to its
  * built-in defaults (which already match prod chat.cherry.fun).
  *

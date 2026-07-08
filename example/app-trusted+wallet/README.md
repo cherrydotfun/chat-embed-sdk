@@ -37,7 +37,7 @@ user browser          host backend              Cherry server
      |                                               |
      |    Cherry server wants proof of wallet         |
      | <-- cherry:request signChallenge { message } --|
-     |    SDK calls onSignChallenge handler           |
+     |    SDK invokes the signChallengeHandler        |
      | -- Phantom.signMessage(challenge) ----------- |
      |    (wallet popup: "Sign message?")             |
      | -- cherry:response { signature } ------------ |
@@ -57,8 +57,8 @@ Two independent proofs:
 ## Prerequisites
 
 - Phantom browser extension installed: https://phantom.app
-- A Cherry embed app configured with `authMode: app-trusted+wallet` in the
-  Cherry Admin Panel
+- A Cherry embed created with `authMode: app-trusted+wallet` at
+  [portal.cherry.fun](https://portal.cherry.fun) (your Project -> Chat embeds)
 
 ## Setup
 
@@ -73,7 +73,7 @@ npm install
 
 ```bash
 cp .env.example .env
-# Edit .env: fill in APP_ID and APP_SECRET from Cherry Admin Panel
+# Edit .env: fill in APP_ID (embed ID) and APP_SECRET from your embed's settings at portal.cherry.fun
 ```
 
 ### 3. Build the SDK (if not already built)
@@ -101,7 +101,7 @@ Open http://localhost:3000 and click "Connect Phantom".
 4. `CherryEmbed` is created with `token` + `walletAddress`
 5. `chat.mount()` — iframe loads
 6. Cherry server sends `signChallenge` via `cherry:request` postMessage
-7. SDK calls the `onSignChallenge` handler
+7. SDK invokes the registered `signChallengeHandler`
 8. Phantom shows "Sign message?" popup — user approves
 9. Signature returned to SDK — forwarded to Cherry server
 10. Cherry server verifies Ed25519 — issues Cherry JWT
