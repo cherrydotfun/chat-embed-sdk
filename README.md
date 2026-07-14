@@ -96,10 +96,17 @@ The portal docs are the source of truth for the SDK surface:
 - [API reference](https://portal.cherry.fun/docs/embed/api-reference) — methods, events, types
 - [Guides](https://portal.cherry.fun/docs/guides/public-chat) — public chat, authenticated chat, room-per-entity
 
+## React Native (WebView)
+
+The SDK is browser-only (`document`/`iframe`/`window.postMessage`), so it can't run directly in React Native. Run it inside a `react-native-webview` on a small host page, and bridge wallet signing to the native layer (Mobile Wallet Adapter on Android / deeplink on iOS) — there's no `window.phantom` in a mobile WebView. Don't point the WebView straight at `embed.cherry.fun`: the bridge rejects when `window.parent === window`, so the embed must be nested in an iframe on a host page.
+
+Full guide: [`docs/react-native.md`](./docs/react-native.md). Runnable code (hosted + bundled host page): [`example/react-native/`](./example/react-native/).
+
 ## Examples
 
 - [`example/wallet-only/`](./example/wallet-only/) — static host, no backend; the live demo above runs this app
 - [`example/app-trusted+wallet/`](./example/app-trusted%2Bwallet/) — Express token server + host-page wallet signing
+- [`example/react-native/`](./example/react-native/) — WebView integration with native wallet signing (hosted + bundled host page)
 
 ## Development
 

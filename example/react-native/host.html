@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Cherry Chat — React Native host</title>
+
+  <!--
+    EXAMPLE 1 — HOSTED HOST PAGE
+    ============================
+    Deploy this file to your web server (e.g. https://yoursite.com/cherry-host.html)
+    and load it from React Native with:  <WebView source={{ uri: HOST_URL }} />
+
+    Either deploy the built SDK bundle next to this file as `cherry-embed.js`
+    (the relative <script src> below), or point the tag at the Cherry-hosted
+    rolling bundle:  https://embed.cherry.fun/cherry-embed.js
+
+    Self-hosting the bundle:
+        cd cherry-embed-sdk && npm run build
+        cp dist/index.global.js  <your-web-root>/cherry-embed.js
+
+    The origin of THIS page (https://yoursite.com) must be listed in your embed
+    app's Allowed Origins in the Cherry Admin Panel, otherwise the iframe bridge
+    rejects host commands (fail-secure).
+  -->
+  <script src="./cherry-embed.js"></script>
+
+  <style>
+    html, body, #chat { height: 100%; margin: 0; padding: 0; }
+    body { background: transparent; }
+    #chat { width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="chat"></div>
+
+  <script>
+  (function () {
+    var chat = null;
+    var pendingSigns = {}; // id -> { resolve, reject }
+
+    // ── host page → native ──────────────────────────────────────────────
+    function toRN(msg) {
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+      }
+    }
+
+    // ── base64 helpers (bridge carries bytes as base64 strings) ─────────
+    function bytesToB64(bytes) {
+      var bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    }
+    function b64ToBytes(b64) {
+      var bin = atob(b64);
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    // ── native → host page: deliver a wallet signature ──────────────────
+    window.__cherrySignResult = function (id, signatureB64, errorMsg) {
+      var p = pendingSigns[id];
+      if (!p) return;
+      delete pendingSigns[id];
+      if (errorMsg) p.reject(new Error(errorMsg));
+      else p.resolve(b64ToBytes(signatureB64));
+    };
+
+    // ── native → host page: forward an imperative command to the SDK ────
+    window.__cherryCommand = function (method, paramsJson) {
+      if (!chat) return;
+      var params = {};
+      try { params = paramsJson ? JSON.parse(paramsJson) : {}; } catch (e) {}
+      switch (method) {
+        case 'setWalletAddress': chat.setWalletAddress(params.walletAddress); break;
+        case 'setToken':         chat.setToken(params.token); break;
+        case 'setRoom':          chat.setRoom(params.roomId); break;
+        case 'setTheme':         chat.setTheme(params.theme || {}); break;
+        case 'signOut':          chat.signOut(); break;
+        case 'show':             chat.show(); break;
+        case 'hide':             chat.hide(); break;
+      }
+    };
+
+    // ── native → host page: config + (re)mount ──────────────────────────
+    window.__cherryReceiveConfig = function (configJson) {
+      var cfg;
+      try {
+        cfg = JSON.parse(configJson);
+      } catch (e) {
+        toRN({ type: 'event', event: 'error', data: { code: 'BAD_CONFIG', message: String(e) } });
+        return;
+      }
+      if (chat) { try { chat.destroy(); } catch (_) {} chat = null; }
+      mount(cfg);
+    };
+
+    function requestSignatureFromRN(messageBytes) {
+      var id = 'sign_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+      return new Promise(function (resolve, reject) {
+        pendingSigns[id] = { resolve: resolve, reject: reject };
+        toRN({ type: 'sign', id: id, message: bytesToB64(messageBytes) });
+      });
+    }
+
+    function mount(cfg) {
+      var SDK = window.CherryEmbedSDK;
+      if (!SDK || !SDK.CherryEmbed) {
+        toRN({ type: 'event', event: 'error', data: { code: 'SDK_NOT_LOADED', message: 'CherryEmbedSDK global missing — check the cherry-embed.js <script src>' } });
+        return;
+      }
+
+      chat = new SDK.CherryEmbed({
+        appId: cfg.appId,
+        container: '#chat',
+        roomId: cfg.roomId || undefined,
+        mode: cfg.mode || undefined,
+        token: cfg.token || undefined,
+        walletAddress: cfg.walletAddress || undefined,
+        embedUrl: cfg.embedUrl || undefined,
+        theme: cfg.theme || undefined,
+        layout: cfg.layout || undefined,
+        // CRITICAL: register during construction so the handler is installed
+        // before the iframe fires its first signChallenge. Signing crosses into
+        // the native RN layer (Mobile Wallet Adapter / deeplink).
+        signChallengeHandler: function (messageBytes) {
+          return requestSignatureFromRN(messageBytes);
+        },
+      });
+
+      var events = ['ready', 'authStateChange', 'unreadCount', 'message', 'tokenExpired', 'error', 'walletConnectRequested', 'preview', 'roomChanged'];
+      events.forEach(function (ev) {
+        chat.on(ev, function (data) { toRN({ type: 'event', event: ev, data: data }); });
+      });
+
+      chat.mount().then(function () {
+        toRN({ type: 'event', event: 'mounted' });
+      }).catch(function (err) {
+        toRN({ type: 'event', event: 'error', data: { code: 'MOUNT_FAILED', message: (err && err.message) || String(err) } });
+      });
+    }
+
+    // Tell native we are ready to receive config.
+    toRN({ type: 'ready' });
+  })();
+  </script>
+</body>
+</html>
