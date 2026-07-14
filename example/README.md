@@ -20,11 +20,14 @@ Two self-contained examples, one for each public Cherry Embed `authMode`.
 |---|---|---|---|
 | [`app-trusted+wallet/`](./app-trusted+wallet/) | `app-trusted+wallet` | Express | Backend token + Phantom signature. |
 | [`wallet-only/`](./wallet-only/) | `wallet-only` | None (static) | Phantom only, no backend needed. |
-| [`react-native/`](./react-native/) | any | Depends on mode | WebView + native wallet signing (MWA / deeplink). Hosted & bundled host page. |
+| [`react-native/`](./react-native/) | any | Depends on mode | React Native WebView + native wallet signing (MWA / deeplink). Hosted & bundled host page. |
+| [`flutter/`](./flutter/) | any | Depends on mode | Flutter WebView + native wallet signing (MWA + Phantom deeplink). Hosted & bundled host page. |
 
-> **React Native** doesn't use these Express servers — the SDK runs in a
-> `react-native-webview` on a host page, with wallet signing bridged to the
-> native layer. See [`react-native/README.md`](./react-native/README.md) and
+> **Mobile (React Native / Flutter)** examples don't use these Express servers —
+> the SDK runs in a WebView on a host page, with wallet signing bridged to the
+> native layer. One host page serves both platforms. See
+> [`react-native/README.md`](./react-native/README.md),
+> [`flutter/README.md`](./flutter/README.md), and
 > [`../docs/react-native.md`](../docs/react-native.md).
 
 ## Quick start

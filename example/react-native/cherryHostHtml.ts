@@ -58,10 +58,12 @@ export function buildCherryHostHtml({ sdkUrl }: BuildCherryHostHtmlOptions): str
     var chat = null;
     var pendingSigns = {};
 
-    function toRN(msg) {
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-      }
+    // Platform-agnostic: RN exposes window.ReactNativeWebView; Flutter
+    // (webview_flutter) exposes a JavaScriptChannel named "CherryNative".
+    function toNative(msg) {
+      var s = JSON.stringify(msg);
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(s); return; }
+      if (window.CherryNative && window.CherryNative.postMessage) { window.CherryNative.postMessage(s); return; }
     }
 
     function bytesToB64(bytes) {
@@ -104,25 +106,25 @@ export function buildCherryHostHtml({ sdkUrl }: BuildCherryHostHtmlOptions): str
       try {
         cfg = JSON.parse(configJson);
       } catch (e) {
-        toRN({ type: 'event', event: 'error', data: { code: 'BAD_CONFIG', message: String(e) } });
+        toNative({ type: 'event', event: 'error', data: { code: 'BAD_CONFIG', message: String(e) } });
         return;
       }
       if (chat) { try { chat.destroy(); } catch (_) {} chat = null; }
       mount(cfg);
     };
 
-    function requestSignatureFromRN(messageBytes) {
+    function requestSignatureFromNative(messageBytes) {
       var id = 'sign_' + Date.now() + '_' + Math.random().toString(36).slice(2);
       return new Promise(function (resolve, reject) {
         pendingSigns[id] = { resolve: resolve, reject: reject };
-        toRN({ type: 'sign', id: id, message: bytesToB64(messageBytes) });
+        toNative({ type: 'sign', id: id, message: bytesToB64(messageBytes) });
       });
     }
 
     function mount(cfg) {
       var SDK = window.CherryEmbedSDK;
       if (!SDK || !SDK.CherryEmbed) {
-        toRN({ type: 'event', event: 'error', data: { code: 'SDK_NOT_LOADED', message: 'CherryEmbedSDK global missing — check the sdkUrl <script src>' } });
+        toNative({ type: 'event', event: 'error', data: { code: 'SDK_NOT_LOADED', message: 'CherryEmbedSDK global missing — check the sdkUrl <script src>' } });
         return;
       }
 
@@ -137,23 +139,23 @@ export function buildCherryHostHtml({ sdkUrl }: BuildCherryHostHtmlOptions): str
         theme: cfg.theme || undefined,
         layout: cfg.layout || undefined,
         signChallengeHandler: function (messageBytes) {
-          return requestSignatureFromRN(messageBytes);
+          return requestSignatureFromNative(messageBytes);
         },
       });
 
       var events = ['ready', 'authStateChange', 'unreadCount', 'message', 'tokenExpired', 'error', 'walletConnectRequested', 'preview', 'roomChanged'];
       events.forEach(function (ev) {
-        chat.on(ev, function (data) { toRN({ type: 'event', event: ev, data: data }); });
+        chat.on(ev, function (data) { toNative({ type: 'event', event: ev, data: data }); });
       });
 
       chat.mount().then(function () {
-        toRN({ type: 'event', event: 'mounted' });
+        toNative({ type: 'event', event: 'mounted' });
       }).catch(function (err) {
-        toRN({ type: 'event', event: 'error', data: { code: 'MOUNT_FAILED', message: (err && err.message) || String(err) } });
+        toNative({ type: 'event', event: 'error', data: { code: 'MOUNT_FAILED', message: (err && err.message) || String(err) } });
       });
     }
 
-    toRN({ type: 'ready' });
+    toNative({ type: 'ready' });
   })();
   </script>
 </body>

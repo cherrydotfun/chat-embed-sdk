@@ -1,0 +1,35 @@
+name: cherry_embed_flutter_example
+description: Embed Cherry Chat in a Flutter app via WebView + native wallet signing.
+publish_to: "none"
+version: 1.0.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # WebView that hosts the Cherry embed SDK.
+  webview_flutter: ^4.7.0
+
+  # Android — Mobile Wallet Adapter (native wallet signing).
+  solana_mobile_client: ^0.1.2
+
+  # iOS — Phantom deeplink: launch the wallet + receive its redirect.
+  url_launcher: ^6.2.5
+  app_links: ^6.0.1
+
+  # iOS Phantom deeplink crypto (x25519 box) + base58 payloads.
+  pinenacl: ^0.6.0
+  bs58: ^1.0.2
+
+  # app-trusted+wallet: fetch the embed token from your backend.
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,34 +1,43 @@
+/// cherry_host_html.dart — the Cherry Chat host page as a bundled string.
+///
+/// EXAMPLE 2 — HOST PAGE THAT LIVES IN YOUR FLUTTER REPO
+/// =====================================================
+/// Instead of deploying a separate web page (Example 1), the host page ships
+/// inside your Flutter app and is loaded with `controller.loadHtmlString(...)`
+/// via `CherryChatSource.html(...)`.
+///
+/// The chat itself is still a hosted iframe (embed.cherry.fun) and the SDK is
+/// still JS that must be fetched — a `loadHtmlString` document has no origin to
+/// resolve a relative `<script src>` against, so `sdkUrl` must be a FULL URL.
+/// The simplest is the Cherry-hosted rolling bundle (same origin as the chat
+/// iframe), which the example uses by default:
+///
+///     https://embed.cherry.fun/cherry-embed.js
+///
+/// Prefer to self-host? Build it yourself and upload it somewhere reachable:
+///
+///     cd cherry-embed-sdk && npm run build   # produces dist/index.global.js
+///     # upload dist/index.global.js to e.g. https://cdn.yoursite.com/cherry-embed.js
+///
+/// The protocol here is identical to the React Native `host.html`; the page
+/// auto-detects the platform (RN `window.ReactNativeWebView` vs Flutter's
+/// `CherryNative` JavaScriptChannel).
+///
+/// NOTE on iOS: pass a `baseUrl` when loading (CherryChatSource.html does this)
+/// so WKWebView allows the remote SDK `<script src>` from a null-origin doc.
+library;
+
+String buildCherryHostHtml({
+  String sdkUrl = 'https://embed.cherry.fun/cherry-embed.js',
+}) {
+  return '''
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Cherry Chat — mobile WebView host</title>
-
-  <!--
-    EXAMPLE 1 — HOSTED HOST PAGE (React Native AND Flutter)
-    =======================================================
-    Deploy this file to your web server (e.g. https://yoursite.com/cherry-host.html)
-    and load it from the WebView:
-      - React Native:  <WebView source={{ uri: HOST_URL }} />
-      - Flutter:       controller.loadRequest(Uri.parse(HOST_URL))
-    The page detects the platform automatically (see `toNative` below); Flutter
-    must name its JavaScriptChannel "CherryNative".
-
-    Either deploy the built SDK bundle next to this file as `cherry-embed.js`
-    (the relative <script src> below), or point the tag at the Cherry-hosted
-    rolling bundle:  https://embed.cherry.fun/cherry-embed.js
-
-    Self-hosting the bundle:
-        cd cherry-embed-sdk && npm run build
-        cp dist/index.global.js  <your-web-root>/cherry-embed.js
-
-    The origin of THIS page (https://yoursite.com) must be listed in your embed
-    app's Allowed Origins in the Cherry Admin Panel, otherwise the iframe bridge
-    rejects host commands (fail-secure).
-  -->
-  <script src="./cherry-embed.js"></script>
-
+  <title>Cherry Chat — Flutter host (bundled)</title>
+  <script src="$sdkUrl"></script>
   <style>
     html, body, #chat { height: 100%; margin: 0; padding: 0; }
     body { background: transparent; }
@@ -37,23 +46,19 @@
 </head>
 <body>
   <div id="chat"></div>
-
   <script>
   (function () {
     var chat = null;
-    var pendingSigns = {}; // id -> { resolve, reject }
+    var pendingSigns = {};
 
-    // ── host page → native ──────────────────────────────────────────────
-    // Platform-agnostic: React Native exposes window.ReactNativeWebView;
-    // Flutter (webview_flutter) exposes a JavaScriptChannel that MUST be
-    // named "CherryNative". The same host page serves both.
+    // Platform-agnostic: RN exposes window.ReactNativeWebView; Flutter
+    // (webview_flutter) exposes a JavaScriptChannel named "CherryNative".
     function toNative(msg) {
       var s = JSON.stringify(msg);
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(s); return; }
       if (window.CherryNative && window.CherryNative.postMessage) { window.CherryNative.postMessage(s); return; }
     }
 
-    // ── base64 helpers (bridge carries bytes as base64 strings) ─────────
     function bytesToB64(bytes) {
       var bin = '';
       for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
@@ -66,7 +71,6 @@
       return out;
     }
 
-    // ── native → host page: deliver a wallet signature ──────────────────
     window.__cherrySignResult = function (id, signatureB64, errorMsg) {
       var p = pendingSigns[id];
       if (!p) return;
@@ -75,7 +79,6 @@
       else p.resolve(b64ToBytes(signatureB64));
     };
 
-    // ── native → host page: forward an imperative command to the SDK ────
     window.__cherryCommand = function (method, paramsJson) {
       if (!chat) return;
       var params = {};
@@ -91,7 +94,6 @@
       }
     };
 
-    // ── native → host page: config + (re)mount ──────────────────────────
     window.__cherryReceiveConfig = function (configJson) {
       var cfg;
       try {
@@ -115,7 +117,7 @@
     function mount(cfg) {
       var SDK = window.CherryEmbedSDK;
       if (!SDK || !SDK.CherryEmbed) {
-        toNative({ type: 'event', event: 'error', data: { code: 'SDK_NOT_LOADED', message: 'CherryEmbedSDK global missing — check the cherry-embed.js <script src>' } });
+        toNative({ type: 'event', event: 'error', data: { code: 'SDK_NOT_LOADED', message: 'CherryEmbedSDK global missing — check the sdkUrl <script src>' } });
         return;
       }
 
@@ -129,9 +131,6 @@
         embedUrl: cfg.embedUrl || undefined,
         theme: cfg.theme || undefined,
         layout: cfg.layout || undefined,
-        // CRITICAL: register during construction so the handler is installed
-        // before the iframe fires its first signChallenge. Signing crosses into
-        // the native layer (Mobile Wallet Adapter / deeplink).
         signChallengeHandler: function (messageBytes) {
           return requestSignatureFromNative(messageBytes);
         },
@@ -149,9 +148,10 @@
       });
     }
 
-    // Tell native we are ready to receive config.
     toNative({ type: 'ready' });
   })();
   </script>
 </body>
 </html>
+''';
+}

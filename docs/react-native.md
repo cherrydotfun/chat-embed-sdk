@@ -6,7 +6,15 @@ via `document`, listens on `window` `message` events, and posts to
 run directly in the RN JS runtime. This guide shows the supported approach:
 run the SDK inside a WebView and bridge wallet signing to the native layer.
 
-Runnable code: [`../example/react-native/`](../example/react-native/).
+> **Flutter:** the exact same architecture and bridge protocol apply — only the
+> WebView plumbing differs (`webview_flutter`'s `JavaScriptChannel` +
+> `runJavaScript` instead of RN's `postMessage`/`injectJavaScript`, and Dart's
+> `dart:convert` `base64` instead of hand-rolled helpers). The host page
+> auto-detects the platform, so one page serves both. See the
+> [Flutter section](#flutter) below and [`../example/flutter/`](../example/flutter/).
+
+Runnable code: [`../example/react-native/`](../example/react-native/) ·
+[`../example/flutter/`](../example/flutter/).
 
 ## Why `signChallenge` fails in a naive setup
 
@@ -136,3 +144,33 @@ signature appended — slice the last 64 bytes when the result is longer.
   keep `domStorageEnabled` on. Sessions are short-lived by design (~15 min JWT).
 - **iOS deeplinks navigate away and back.** Handle the return via your universal
   link handler and resolve the pending `onSign`/`connectWallet` promise there.
+
+## Flutter
+
+Everything above applies unchanged — same host page, same bridge protocol, same
+auth modes and gotchas. Only the WebView plumbing is Flutter-specific.
+
+| Concern | React Native | Flutter (`webview_flutter`) |
+|---|---|---|
+| Page → native | `window.ReactNativeWebView.postMessage` + `onMessage` | `JavaScriptChannel('CherryNative')`; page calls `CherryNative.postMessage`, native gets `onMessageReceived` |
+| Native → page | `webview.injectJavaScript(js)` | `controller.runJavaScript(js)` |
+| Load hosted page | `source={{ uri }}` | `controller.loadRequest(Uri.parse(url))` |
+| Load bundled page | `source={{ html }}` | `controller.loadHtmlString(html, baseUrl: ...)` |
+| base64 | hand-rolled helpers | `dart:convert` `base64` |
+
+Key points specific to Flutter:
+
+- **Channel name must be `CherryNative`.** The shared host page tries
+  `window.ReactNativeWebView` first, then `window.CherryNative` — so name the
+  `JavaScriptChannel` exactly `CherryNative`.
+- **`JavaScriptMode.unrestricted`** is required; set a transparent background
+  (`setBackgroundColor(Color(0x00000000))`) if your page is transparent.
+- **`loadHtmlString` needs a `baseUrl`** on iOS/WKWebView so the null-origin
+  document may load the remote SDK `<script src>`. Set it to the SDK origin
+  (e.g. `https://embed.cherry.fun`).
+- **Wallet signing:** Android via `solana_mobile_client` (MWA); iOS via a
+  Phantom deeplink (encrypted x25519 handshake), with the redirect routed back
+  through `app_links` to resolve the pending signature.
+
+Runnable code and full platform setup (AndroidManifest `<queries>`, iOS
+`Info.plist` URL schemes): [`../example/flutter/`](../example/flutter/).
