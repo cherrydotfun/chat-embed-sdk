@@ -106,6 +106,7 @@ Full guide: [`docs/react-native.md`](./docs/react-native.md). Runnable code (hos
 
 - [`example/wallet-only/`](./example/wallet-only/) — static host, no backend; the live demo above runs this app
 - [`example/app-trusted+wallet/`](./example/app-trusted%2Bwallet/) — Express token server + host-page wallet signing
+- [`example/app-trusted/`](./example/app-trusted/) — Express token server only, zero signature, no wallet. `authMode: app-trusted` is not self-serve — Cherry admins enable it per embed on request.
 - [`example/react-native/`](./example/react-native/) — React Native WebView integration with native wallet signing
 - [`example/flutter/`](./example/flutter/) — Flutter WebView integration (MWA + Phantom deeplink)
 

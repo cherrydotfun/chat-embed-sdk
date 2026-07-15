@@ -111,11 +111,49 @@ Open http://localhost:3000 and click "Connect Phantom".
 
 - The user sees **two** wallet popups: "Connect" and "Sign message". This is
   expected and intentional — the signature proves ownership.
-- In production, derive `walletAddress` on the server from your authenticated
-  session, not from the request body.
+- **In production, derive `walletAddress` on the server from your
+  authenticated session, never from the request body.** This demo passes it
+  from the frontend for simplicity (see step 3 in the auth flow above), but
+  that is a stand-in for a real session lookup: room access, rate limits, and
+  moderation permissions are all enforced against the wallet address embedded
+  in the token, so an un-derived `walletAddress` lets a client spoof another
+  wallet's identity and inherit its room access and rate-limit budget.
 - `APP_SECRET` must stay server-side only.
 - The signature popup message is human-readable, produced by Cherry server —
   users can verify what they are signing.
+
+## Server-side restrictions
+
+Cherry enforces the following limits on embed sessions server-side. These are
+expected behavior, not bugs — handle them in your UI rather than debugging
+them as integration errors:
+
+- **Room access is allow-listed and fail-closed.** An embed app's
+  `allowedRoomIds` (configured at portal.cherry.fun) controls which rooms the
+  chat can open. An app with an empty list is denied everywhere — every room
+  request returns `403` — it is **not** granted access to all public rooms.
+  The chat only works in rooms explicitly allowed for the app (or app-owned
+  rooms with the API enabled).
+- **Message rate limits.** Default ~20 messages/min per user and ~600
+  messages/min per app in total. Exceeding either returns `429`. Limits are
+  configurable per app by Cherry admins.
+- **In-iframe moderation is disabled by default.** Kicking, banning, muting,
+  changing roles, pinning, or deleting other users' messages from inside the
+  embed returns `403` unless a Cherry admin has enabled moderation for your
+  app. Server-to-server moderation via the Apps API bot keys is unaffected.
+- **Message length is capped.** Default max 2000 characters; longer messages
+  are rejected with `400`.
+- **Embed session (Cherry JWT) TTL can be shorter than 15 minutes.** Cherry
+  admins can configure a per-app TTL between 5 and 15 minutes. Session
+  renewal via the rotating refresh token stays automatic — no integration
+  change needed.
+- **Attachments/media upload can be disabled per app.** Enabled by default;
+  Cherry admins can turn it off on request.
+
+None of this changes the embed token contract: `jwt.sign({ sub: walletAddress,
+app_id }, APP_SECRET, { algorithm: 'HS256', expiresIn: '5m', jwtid })` is
+unchanged, and `sub` must always come from your own authenticated session (see
+Security notes above), never from the request body.
 
 ## Key SDK pattern
 

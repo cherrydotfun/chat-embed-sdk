@@ -60,14 +60,18 @@ That's the whole integration. No `token`, no `walletAddress`, no `signChallengeH
 
 ### Limitations of wallet-only mode
 
-- **Public rooms only.** No per-user access lists — `allowedRoomIds` applies globally.
+- **Public rooms only, and room access is allow-listed.** No per-user access lists — the embed app's `allowedRoomIds` (configured at portal.cherry.fun) applies to all users equally. This list is **mandatory and fail-closed**: an app with an empty `allowedRoomIds` gets `403` on every room, not access to all public rooms. The chat only works in rooms explicitly allowed for the app (or app-owned rooms with the API enabled).
 - **No DM / encrypted-group access** from embed (by design).
 - **No host-side identity** — Cherry only knows the wallet address.
+- **Message rate limits apply** — default ~20 messages/min per user and ~600 messages/min per app in total; exceeding either returns `429`. Cherry admins can raise these per app on request.
+- **Message length is capped** — default max 2000 characters per message; longer messages are rejected with `400`.
 
 ### Common pitfalls
 
 - **"Origin mismatch"** — make sure the exact origin (scheme + host + port) is in your embed's **Allowed origins** at portal.cherry.fun.
-- **"Room not found"** — `roomId` must be public and (if a room allowlist is configured) included in it.
+- **"Room not found" / `403`** — `roomId` must be public and included in the app's `allowedRoomIds` allow-list (an empty allow-list means no rooms are reachable, not all of them).
+- **`429` on send** — default per-user/per-app message rate limits were exceeded; back off and retry, or ask Cherry admins to raise the limits for your app.
+- **`400` on send** — the message exceeds the app's max length (2000 characters by default).
 - **CSP** — if your site uses Content-Security-Policy, allow `frame-src https://embed.cherry.fun`.
 
 Working example to copy: [`example/wallet-only/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/wallet-only) (in the `chat-embed-sdk` repo).
@@ -192,18 +196,35 @@ Two popups total (connect + sign) — this is expected, not a bug.
 - A leaked `appSecret` alone is not enough to impersonate users — wallet key is also required.
 - Rotate `appSecret` in your embed's settings at portal.cherry.fun. Rotation is an immediate hard cutover — the old secret is invalidated instantly, so embedTokens signed with it (and live sessions relying on refresh) fail right away. Rotate at a quiet moment and start minting tokens with the new secret immediately.
 
+### Server-side restrictions
+
+Cherry enforces the following limits on embed sessions server-side. Treat them as expected behavior, not bugs — surface them in your UI instead of debugging them as integration errors:
+
+- **Room access is allow-listed and fail-closed.** An embed app's `allowedRoomIds` (configured at portal.cherry.fun) controls which rooms the chat can open. An app with an empty list is denied everywhere — every room request returns `403` — it is **not** granted access to all public rooms. The chat only works in rooms explicitly allowed for the app (or app-owned rooms with the API enabled).
+- **Message rate limits.** Default ~20 messages/min per user and ~600 messages/min per app in total. Exceeding either returns `429`. Limits are configurable per app by Cherry admins.
+- **In-iframe moderation is disabled by default.** Kicking, banning, muting, changing roles, pinning, or deleting other users' messages from inside the embed returns `403` unless a Cherry admin has enabled moderation for your app. Server-to-server moderation via the Apps API bot keys is unaffected.
+- **Message length is capped.** Default max 2000 characters; longer messages are rejected with `400`.
+- **Embed session (Cherry JWT) TTL can be shorter than 15 minutes.** Cherry admins can configure a per-app TTL between 5 and 15 minutes. Session renewal via the rotating refresh token stays automatic — no integration change needed.
+- **Attachments/media upload can be disabled per app.** Enabled by default; Cherry admins can turn it off on request.
+
+None of this changes the embed token contract itself — the `jwt.sign({ sub, app_id }, APP_SECRET, { algorithm: 'HS256', expiresIn: '5m', jwtid })` shape above is unchanged, and `sub` must always come from your own authenticated session (see below), never from the request body.
+
 ### Limitations
 
 - **Public rooms only** for embed flows — no DM / encrypted-group access.
 - Embed token expires in 5 minutes — mint it fresh right before `mount()`, don't cache it.
-- Cherry JWT expires in ~15 minutes — the iframe re-establishes the session automatically from its rotating refresh token on (re)load.
+- Cherry JWT expires in ~15 minutes by default (may be shorter, see Server-side restrictions above) — the iframe re-establishes the session automatically from its rotating refresh token on (re)load.
 
 ### Common pitfalls
 
 - **"Origin mismatch"** — make sure the exact origin (scheme + host + port) is in your embed's **Allowed origins** at portal.cherry.fun.
 - **"Invalid or expired token"** — check `APP_SECRET` matches what Cherry issued; ensure `jti` is unique per token; don't cache tokens.
 - **Wallet popup never appears** — `signChallengeHandler` must be passed in the constructor (not added after `mount()`), otherwise the initial challenge fires before the handler is registered.
-- **Production identity** — derive `walletAddress` from your own server-side session, never trust it from the request body.
+- **`403` on a room** — the room isn't in the app's `allowedRoomIds` allow-list (an empty allow-list means no rooms are reachable, not all of them); add it in the embed's settings.
+- **`403` on kick/ban/mute/role/pin/delete-others from inside the embed** — in-iframe moderation is disabled by default; ask Cherry admins to enable it for your app, or perform moderation server-to-server via the Apps API bot keys instead.
+- **`429` on send** — default per-user/per-app message rate limits were exceeded; back off and retry, or ask Cherry admins to raise the limits for your app.
+- **`400` on send** — the message exceeds the app's max length (2000 characters by default).
+- **Production identity** — derive `walletAddress` from your own server-side session, never trust it from the request body. This is not just an identity risk: room access, rate-limit buckets, and moderation permissions are all enforced against the wallet address in the token, so a spoofed `sub` lets a user inherit another wallet's room access and rate-limit budget.
 - **CSP** — allow `frame-src https://embed.cherry.fun`.
 
 Working example to copy: [`example/app-trusted+wallet/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/app-trusted%2Bwallet) (in the `chat-embed-sdk` repo).
