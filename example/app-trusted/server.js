@@ -56,6 +56,27 @@ const CHERRY_EMBED_URL = process.env.CHERRY_EMBED_URL || 'https://embed.cherry.f
 const ROOM_ID = process.env.ROOM_ID || process.env.CHERRY_ROOM_ID || '';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Bind to loopback by default: this demo server mints tokens for whatever
+// identity its mock session holds, so it must not be reachable from the LAN
+// unless the operator explicitly opts in. Override with HOST=0.0.0.0 only if
+// you understand that anyone who can reach the port can request a token.
+const HOST = process.env.HOST || '127.0.0.1';
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// ---- DEMO_SESSION_SWITCH: opt-in flag for the identity-switch route ----
+//
+// The /api/session/switch route below lets an unauthenticated caller choose
+// which wallet this server signs embedTokens for. That is a deliberate
+// testing affordance, not a pattern to copy — so it is OFF unless explicitly
+// enabled, and it can never be enabled under NODE_ENV=production.
+//
+// When the flag is off the route is NOT REGISTERED AT ALL (requests 404),
+// rather than registered-and-refusing. A route that does not exist cannot be
+// re-enabled by a config mistake.
+const DEMO_SESSION_SWITCH_REQUESTED = process.env.DEMO_SESSION_SWITCH === 'true';
+const DEMO_SESSION_SWITCH_ENABLED = DEMO_SESSION_SWITCH_REQUESTED && !IS_PRODUCTION;
+
 // ---- Static files ----
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -65,6 +86,10 @@ app.get('/cherry-embed.js', (req, res) => {
 });
 
 // ============================================================
+// vvv DELETE EVERYTHING BETWEEN THIS BANNER AND THE MATCHING vvv
+// vvv "END OF DEMO-ONLY SESSION MOCK" BANNER BEFORE SHIPPING. vvv
+// ============================================================
+//
 // Mock "authenticated session"
 //
 // In app-trusted mode Cherry has NO independent way to verify the user —
@@ -73,11 +98,16 @@ app.get('/cherry-embed.js', (req, res) => {
 // reads `req.session.user` / `req.user` here (populated by your own login
 // middleware — cookie session, OAuth, SIWS, whatever you already run).
 //
-// There is no client-facing "log in as any wallet" endpoint in production.
-// The two demo users and the /api/session/switch endpoint below exist
-// PURELY so this example can show `chat.setToken()` forcing a re-exchange
-// after an account switch, as described in the SDK docs. Delete all of
-// this and wire real session middleware before shipping.
+// A real backend derives the wallet from its OWN authenticated session and
+// has NO client-triggerable identity switch of any kind. Users change
+// identity by logging out and back in through your real auth flow — never by
+// POSTing a wallet address at your server.
+//
+// The demo users, the process-global `activeSessionUserId`, and the
+// /api/session/switch route below exist PURELY so this example can show
+// `chat.setToken()` forcing a re-exchange after an account switch, as
+// described in the SDK docs. Replace all of it with real session middleware
+// before shipping.
 // ============================================================
 const DEMO_USERS = {
   alice: { id: 'alice', walletAddress: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU' },
@@ -98,6 +128,10 @@ app.get('/api/config', (req, res) => {
     embedUrl: CHERRY_EMBED_URL,
     roomId: ROOM_ID || null,
     configured: !!(APP_ID && APP_SECRET),
+    // Lets the demo frontend hide the identity-switch controls when the
+    // route they call does not exist. Purely cosmetic — the real gate is
+    // that the route is never registered (see below).
+    demoSessionSwitch: DEMO_SESSION_SWITCH_ENABLED,
   });
 });
 
@@ -109,39 +143,57 @@ app.get('/api/session', (req, res) => {
   res.json({ userId: user.id, walletAddress: user.walletAddress });
 });
 
-// ---- POST /api/session/switch ----
-// DEMO ONLY — flips which mock user is "logged in" so you can watch a
-// setToken() re-exchange happen. A real backend has no equivalent
-// client-triggerable endpoint; users switch identity by logging out and
-// back in through your real auth flow, not by POSTing a user id.
+// ---- POST /api/session/switch ----  (DEMO_SESSION_SWITCH=true only)
 //
-// For TESTING this endpoint also accepts `{ walletAddress }` to log the
-// mock session in as an ARBITRARY wallet — handy for exercising room
-// membership, rate limits, or moderation roles of a specific wallet.
-// This is exactly the "client picks the identity" hole the comments above
-// warn about: it must never exist in a production backend.
+// DEMO ONLY — flips which mock user is "logged in" so you can watch a
+// setToken() re-exchange happen, and accepts `{ walletAddress }` to log the
+// mock session in as an ARBITRARY wallet (handy for exercising a specific
+// wallet's room membership, rate limits, or moderation role).
+//
+// READ THIS BEFORE COPYING ANYTHING FROM THIS FILE:
+// This route lets an unauthenticated caller decide which wallet the next
+// /api/embed-token is signed for, with the REAL app secret. That is the
+// exact identity-injection hole that the comments around getSessionUser()
+// warn about — it is present here on purpose, as a local testing tool, and
+// it must never exist in a production backend in any form.
+//
+// Three things keep it from being inherited by accident:
+//   1. it is only registered when DEMO_SESSION_SWITCH=true (otherwise the
+//      path 404s — the handler is never attached to the app);
+//   2. it is never registered when NODE_ENV=production, flag or not;
+//   3. the server binds to 127.0.0.1 by default, so it is not reachable
+//      from the network.
+// None of those are a substitute for deleting this route before shipping.
 const BASE58_WALLET_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-app.post('/api/session/switch', (req, res) => {
-  const { userId, walletAddress } = req.body || {};
 
-  if (walletAddress !== undefined) {
-    if (typeof walletAddress !== 'string' || !BASE58_WALLET_RE.test(walletAddress.trim())) {
-      return res.status(400).json({
-        error: 'walletAddress must be a base58 Solana public key (32-44 chars)',
-      });
+if (DEMO_SESSION_SWITCH_ENABLED) {
+  app.post('/api/session/switch', (req, res) => {
+    const { userId, walletAddress } = req.body || {};
+
+    if (walletAddress !== undefined) {
+      if (typeof walletAddress !== 'string' || !BASE58_WALLET_RE.test(walletAddress.trim())) {
+        return res.status(400).json({
+          error: 'walletAddress must be a base58 Solana public key (32-44 chars)',
+        });
+      }
+      const custom = { id: 'custom', walletAddress: walletAddress.trim() };
+      DEMO_USERS.custom = custom;
+      activeSessionUserId = 'custom';
+      return res.json({ userId: custom.id, walletAddress: custom.walletAddress });
     }
-    const custom = { id: 'custom', walletAddress: walletAddress.trim() };
-    DEMO_USERS.custom = custom;
-    activeSessionUserId = 'custom';
-    return res.json({ userId: custom.id, walletAddress: custom.walletAddress });
-  }
 
-  if (!DEMO_USERS[userId]) {
-    return res.status(400).json({ error: `Unknown demo user "${userId}"` });
-  }
-  activeSessionUserId = userId;
-  res.json({ userId: DEMO_USERS[userId].id, walletAddress: DEMO_USERS[userId].walletAddress });
-});
+    if (!DEMO_USERS[userId]) {
+      return res.status(400).json({ error: `Unknown demo user "${userId}"` });
+    }
+    activeSessionUserId = userId;
+    res.json({ userId: DEMO_USERS[userId].id, walletAddress: DEMO_USERS[userId].walletAddress });
+  });
+}
+
+// ============================================================
+// ^^^ END OF DEMO-ONLY SESSION MOCK — everything from the banner ^^^
+// ^^^ above down to here is replaced by real session middleware.  ^^^
+// ============================================================
 
 // ---- POST /api/embed-token ----
 //
@@ -184,15 +236,35 @@ app.post('/api/embed-token', (req, res) => {
 });
 
 // ---- Start ----
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   console.log(`\nCherry Embed — app-trusted example`);
-  console.log(`Running at http://localhost:${PORT}\n`);
+  console.log(`Running at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);
   console.log('Config:');
   console.log(`  APP_ID:    ${APP_ID || '(not set — check .env)'}`);
   console.log(`  Embed URL: ${CHERRY_EMBED_URL}`);
+  console.log(`  Bind:      ${HOST}:${PORT}${HOST === '127.0.0.1' ? ' (loopback only)' : ''}`);
 
   if (!APP_ID || !APP_SECRET) {
     console.log('\nWARNING: APP_ID or APP_SECRET not set.');
     console.log('  cd example && cp .env.example .env  # then fill in and restart\n');
+  }
+
+  if (DEMO_SESSION_SWITCH_ENABLED) {
+    console.log('\n**************************************************************');
+    console.log('  DEMO identity switch ENABLED — /api/session/switch can mint');
+    console.log('  a token for ANY wallet. Never enable this in production.');
+    console.log('  (unset DEMO_SESSION_SWITCH to remove the route entirely)');
+    console.log('**************************************************************\n');
+  }
+
+  if (DEMO_SESSION_SWITCH_REQUESTED && IS_PRODUCTION) {
+    console.log('\nWARNING: DEMO_SESSION_SWITCH=true was IGNORED because');
+    console.log('  NODE_ENV=production. /api/session/switch is not registered.\n');
+  }
+
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+    console.log(`\nWARNING: bound to ${HOST} — this demo server is reachable`);
+    console.log('  beyond this machine. It mints embedTokens with your real');
+    console.log('  app secret and has no auth of its own.\n');
   }
 });

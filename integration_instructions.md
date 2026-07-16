@@ -5,6 +5,8 @@ Two recommended integration modes:
 - **Wallet-Only** — simplest, no backend required. Best for quick drop-in widgets where Cherry is the only source of user identity.
 - **App-Trusted + Wallet** — recommended for production public integrations. Adds backend-issued HMAC proof on top of the wallet signature, so a leaked secret alone cannot impersonate users.
 
+There is a third mode, **App-Trusted** (zero-signature: your backend's token is the only identity proof, users never connect a wallet). Like the two above it is self-serve — pick it in **Chat embeds** → auth mode at [portal.cherry.fun](https://portal.cherry.fun). It trades away the wallet signature, so use it only when your own login is the source of truth (internal tools, trusted partners); see [`example/app-trusted/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/app-trusted). Everything below about the token contract, the room allow-list and the server-side restrictions applies to it unchanged.
+
 ---
 
 ## Mode 1 — Wallet-Only Integration (Quick Start)

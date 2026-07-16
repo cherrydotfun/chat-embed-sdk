@@ -1,15 +1,14 @@
 # Cherry Embed SDK — Examples
 
-Self-contained examples for the Cherry Embed `authMode`s. `wallet-only` and
-`app-trusted+wallet` are self-serve — pick either at portal.cherry.fun.
-`app-trusted` is gated: Cherry admins enable it per embed on request (see
-[`app-trusted/README.md`](./app-trusted/README.md)).
+Self-contained examples for the Cherry Embed `authMode`s. All three are
+self-serve: pick any of them in your embed's auth mode at portal.cherry.fun.
+They differ in what proves a user's identity, not in how you get access.
 
 ## Choose your authMode
 
 | | app-trusted | app-trusted+wallet | wallet-only |
 |---|:---:|:---:|:---:|
-| Self-serve at portal.cherry.fun | no — on request | yes | yes |
+| Self-serve at portal.cherry.fun | yes | yes | yes |
 | Host backend | required | required | not needed |
 | Wallet adapter | none | yes (Phantom) | yes (Phantom) |
 | `token` (embedToken) | yes | yes | no |
@@ -22,7 +21,7 @@ Self-contained examples for the Cherry Embed `authMode`s. `wallet-only` and
 
 | Directory | authMode | Backend | Description |
 |---|---|---|---|
-| [`app-trusted/`](./app-trusted/) | `app-trusted` | Express | Backend-only token, zero signature, no wallet. Gated — on request. |
+| [`app-trusted/`](./app-trusted/) | `app-trusted` | Express | Backend-only token, zero signature, no wallet. |
 | [`app-trusted+wallet/`](./app-trusted+wallet/) | `app-trusted+wallet` | Express | Backend token + Phantom signature. |
 | [`wallet-only/`](./wallet-only/) | `wallet-only` | None (static) | Phantom only, no backend needed. |
 | [`react-native/`](./react-native/) | any | Depends on mode | React Native WebView + native wallet signing (MWA / deeplink). Hosted & bundled host page. |
@@ -68,8 +67,9 @@ cp .env.example .env
 
 ### 4. Run an example
 
-**app-trusted** (backend only, no wallet — requires the mode enabled on
-your embed by Cherry admins, see [`app-trusted/README.md`](./app-trusted/README.md)):
+**app-trusted** (backend only, no wallet — set your embed's auth mode to
+`app-trusted` at portal.cherry.fun first, see
+[`app-trusted/README.md`](./app-trusted/README.md)):
 
 ```bash
 npm run start:app-trusted
@@ -97,7 +97,7 @@ npm run start:wallet-only
 
 ## Detailed documentation
 
-- [app-trusted/README.md](./app-trusted/README.md) — setup, flow, trust model, gated access
+- [app-trusted/README.md](./app-trusted/README.md) — setup, flow, trust model
 - [app-trusted+wallet/README.md](./app-trusted+wallet/README.md) — setup, flow, Phantom integration
 - [wallet-only/README.md](./wallet-only/README.md) — setup, static serving, limitations
 
@@ -105,8 +105,9 @@ npm run start:wallet-only
 
 **app-trusted** — your backend already fully authenticates users through
 your own system and a wallet popup is unacceptable UX (internal tools,
-trusted partners). Not self-serve — ask Cherry admins to enable it for your
-embed first.
+trusted partners). It drops the wallet signature entirely, so Cherry trusts
+whatever wallet your backend asserts: choose it only when your own login is
+the source of truth.
 
 **app-trusted+wallet** — your users have Solana wallets and you want the
 strongest security: the host backend proves the app is legitimate (appSecret),

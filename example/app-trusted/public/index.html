@@ -315,29 +315,45 @@
             <span class="label">Wallet address</span>
             <span class="value" id="session-wallet">—</span>
           </div>
-          <button class="btn btn-secondary" id="btn-switch" onclick="switchUser()">
-            Switch demo user
-          </button>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <input
-              id="custom-wallet"
-              type="text"
-              placeholder="Custom wallet address (base58, for testing)"
-              spellcheck="false"
-              style="flex:1;min-width:0;font-family:monospace;font-size:11px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"
-            />
-            <button class="btn btn-secondary" id="btn-custom-wallet" onclick="useCustomWallet()">
-              Use wallet
+          <!-- Demo-only identity switch. Shown only when the server reports
+               demoSessionSwitch: true (DEMO_SESSION_SWITCH=true). When the
+               flag is off the route below does not exist server-side, so
+               these controls are hidden rather than left to 404. -->
+          <div id="demo-switch-controls" style="display:none">
+            <button class="btn btn-secondary" id="btn-switch" onclick="switchUser()">
+              Switch demo user
             </button>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input
+                id="custom-wallet"
+                type="text"
+                placeholder="Custom wallet address (base58, for testing)"
+                spellcheck="false"
+                style="flex:1;min-width:0;font-family:monospace;font-size:11px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"
+              />
+              <button class="btn btn-secondary" id="btn-custom-wallet" onclick="useCustomWallet()">
+                Use wallet
+              </button>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
+              The embed token's <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">sub</code>
+              is always read from this server-side session — never from a
+              request body. "Switch demo user" flips the mock session and
+              calls <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">chat.setToken()</code>
+              so you can watch a re-exchange happen. "Use wallet" logs the mock
+              session in as an arbitrary wallet — TEST ONLY, a real backend must
+              never let the client pick the identity.
+            </p>
           </div>
-          <p style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
-            The embed token's <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">sub</code>
-            is always read from this server-side session — never from a
-            request body. "Switch demo user" flips the mock session and
-            calls <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">chat.setToken()</code>
-            so you can watch a re-exchange happen. "Use wallet" logs the mock
-            session in as an arbitrary wallet — TEST ONLY, a real backend must
-            never let the client pick the identity.
+
+          <p id="demo-switch-disabled-note" style="display:none;font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
+            Identity switching is off. The embed token's
+            <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">sub</code>
+            comes from this server-side session and nothing can change it —
+            which is how a real backend behaves. Set
+            <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">DEMO_SESSION_SWITCH=true</code>
+            in <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">example/.env</code>
+            to enable the test-only switch controls.
           </p>
         </div>
       </div>
@@ -473,7 +489,18 @@ async function loadConfig() {
       statusEl.innerHTML = '<span class="badge badge-warn">Missing .env values</span>';
     }
 
-    log('config.loaded', { configured: appConfig.configured });
+    // The demo-only identity-switch route only exists when the server was
+    // started with DEMO_SESSION_SWITCH=true. Hide the controls otherwise —
+    // they would just 404, and their absence is what a real backend looks
+    // like anyway.
+    const switchOn = !!appConfig.demoSessionSwitch;
+    document.getElementById('demo-switch-controls').style.display = switchOn ? '' : 'none';
+    document.getElementById('demo-switch-disabled-note').style.display = switchOn ? 'none' : '';
+
+    log('config.loaded', {
+      configured: appConfig.configured,
+      demoSessionSwitch: switchOn,
+    });
   } catch (err) {
     log('config.error', String(err));
   }

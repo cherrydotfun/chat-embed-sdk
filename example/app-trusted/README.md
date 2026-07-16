@@ -3,11 +3,11 @@
 authMode: `app-trusted` — pure, zero-signature. The host backend is the sole
 source of trust.
 
-> **This mode is not self-serve.** Unlike `wallet-only` and
-> `app-trusted+wallet`, `authMode: app-trusted` is assigned by Cherry admins
-> on request — it is not a selectable option when creating an embed at
-> [portal.cherry.fun](https://portal.cherry.fun). Ask the Cherry team to
-> enable it for your embed before pointing this example at a real `appId`.
+> **Pick this mode yourself.** Like `wallet-only` and `app-trusted+wallet`,
+> `authMode: app-trusted` is selectable under "Who signs your users in?" when
+> you configure an embed at [portal.cherry.fun](https://portal.cherry.fun) —
+> no request to the Cherry team needed. Read the trust model below before you
+> choose it: it is the only mode with no independent proof of wallet ownership.
 
 ## When to use this mode
 
@@ -75,8 +75,8 @@ budget, and message history included.
 ## Prerequisites
 
 - Node.js >= 18 — no wallet/browser extension needed, this mode has none
-- A Cherry embed with `authMode: app-trusted` enabled by Cherry admins at
-  your request (see the note at the top of this file)
+- A Cherry embed set to `authMode: app-trusted` in its portal settings
+  (see the note at the top of this file)
 
 ## Setup
 
@@ -96,6 +96,13 @@ cp .env.example .env
 # you keep a dedicated embed per mode — see .env.example)
 ```
 
+`.env.example` ships with `DEMO_SESSION_SWITCH=true`, which turns on the
+test-only identity switch described under
+[Demo identity switch](#demo-identity-switch-test-only-opt-in) below. If you
+copied `.env` before that flag existed, add it by hand — otherwise the
+"Switch demo user" / "Use wallet" controls are hidden and the example runs
+with its default demo session (which is the correct production shape).
+
 ### 3. Build the SDK (if not already built)
 
 ```bash
@@ -113,6 +120,17 @@ npm run start:app-trusted
 
 Open http://localhost:3000 — the chat mounts immediately, no click required.
 
+The server binds to `127.0.0.1` (loopback) by default, so it is reachable
+from a browser on the same machine and nowhere else. This demo mints
+embedTokens with your real `APP_SECRET` and has no auth of its own, so it
+should not be exposed to a network. If you genuinely need to reach it from
+another device (a phone on the same Wi-Fi, a container host), override the
+bind explicitly:
+
+```bash
+HOST=0.0.0.0 npm run start:app-trusted   # you now own who can reach the port
+```
+
 ## What happens at runtime
 
 1. Page loads and fetches `/api/config` + `/api/session` (the mock signed-in
@@ -124,15 +142,54 @@ Open http://localhost:3000 — the chat mounts immediately, no click required.
    `signChallengeHandler`.
 4. `chat.mount()` — iframe loads and exchanges the embedToken for a Cherry
    JWT server-to-server. No `cherry:request` for a signature is ever sent.
-5. Chat is immediately authenticated. Click "Switch demo user" in the left
-   panel to see `chat.setToken()` force a fresh exchange after the mock
-   session's identity changes — this stands in for a real account switch.
+5. Chat is immediately authenticated. With `DEMO_SESSION_SWITCH=true`, click
+   "Switch demo user" in the left panel to see `chat.setToken()` force a
+   fresh exchange after the mock session's identity changes — this stands in
+   for a real account switch.
 6. To test as a SPECIFIC wallet, paste any base58 wallet address into the
    "Custom wallet address" field and click "Use wallet" — the mock session
    logs in as that wallet and the chat re-exchanges. Useful for checking a
-   real wallet's room access, rate limits, or moderation role. TEST ONLY:
-   this is exactly the "client picks the identity" hole a production
-   backend must never have.
+   real wallet's room access, rate limits, or moderation role. See below.
+
+## Demo identity switch (TEST ONLY, opt-in)
+
+`POST /api/session/switch` lets the caller pick which wallet the server
+signs the next embedToken for — by demo user id (`{ userId }`) or by raw
+address (`{ walletAddress }`). It exists so you can exercise a specific
+wallet's room access, rate limits, or moderation role without being able to
+log in as them.
+
+**This is the "client picks the identity" hole this README warns about, on
+purpose.** Any caller that can reach the route can make the server mint a
+token for any wallet using your real `APP_SECRET`. A production backend
+derives the wallet from its own authenticated session and has no
+client-triggerable identity switch at all.
+
+Four things keep it from being inherited by accident:
+
+| Guard | Behavior |
+| --- | --- |
+| `DEMO_SESSION_SWITCH` env flag | Route is registered **only** when set to `true`. Unset → the path 404s; the handler is never attached. |
+| `NODE_ENV=production` | Route is **never** registered, flag or not. The server logs a warning at startup if the flag was set. |
+| Loopback bind | `HOST` defaults to `127.0.0.1`, so the route is not reachable from the network. |
+| Startup banner | The server prints a loud warning whenever the switch is live. |
+
+```bash
+# enabled (default in .env.example — the UI shows the switch controls)
+DEMO_SESSION_SWITCH=true npm run start:app-trusted
+
+# disabled (production shape — /api/session/switch 404s, controls hidden)
+npm run start:app-trusted
+```
+
+With the flag off the example still works: `/api/embed-token` keeps signing
+the default demo session, and the frontend hides the switch controls behind
+a short caption instead of calling a route that no longer exists.
+
+None of these guards is a substitute for **deleting** the route. In
+`server.js` everything between the `DELETE EVERYTHING BETWEEN THIS BANNER`
+and `END OF DEMO-ONLY SESSION MOCK` banners goes away when you wire real
+session middleware.
 
 ## Server-side restrictions
 
@@ -201,11 +258,16 @@ chat.setToken(freshEmbedToken);
   code.
 - In production, derive `walletAddress` (the token's `sub`) from your
   authenticated session, never from the request body. This demo simulates a
-  session with an in-memory `DEMO_USERS` map and a `/api/session/switch`
-  endpoint that exists purely so you can see a re-exchange (including logging
-  in as an arbitrary wallet for testing) — delete both and wire real session
-  middleware before shipping (see the loud comment above `getSessionUser()`
-  in `server.js`).
+  session with an in-memory `DEMO_USERS` map and an opt-in
+  `/api/session/switch` endpoint that exists purely so you can see a
+  re-exchange (including logging in as an arbitrary wallet for testing) —
+  delete both and wire real session middleware before shipping. See
+  [Demo identity switch](#demo-identity-switch-test-only-opt-in) and the
+  banner comments in `server.js`.
+- The demo server binds to `127.0.0.1` by default and refuses to register the
+  demo switch under `NODE_ENV=production`. Both are guardrails for *this
+  sample*, not a security design to copy — a real backend has no such route
+  to guard.
 - JTI replay protection is enforced by the Cherry server (Redis-backed).
 - embedToken TTL is 5 minutes; the example auto-refreshes 30s before expiry.
 - Rotate `APP_SECRET` in your embed's settings at portal.cherry.fun if it

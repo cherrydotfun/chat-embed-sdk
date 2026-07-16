@@ -1,6 +1,6 @@
 ---
 name: cherry-embed-integration
-description: "Use when embedding Cherry Chat into a web, React Native, or Flutter app with @cherrydotfun/chat-embed-sdk. Detect the host platform first, then follow exactly one path: web (the SDK directly) or mobile (WebView host page + native signing bridge). Covers the two public auth modes (wallet-only, app-trusted+wallet), backend token generation, wallet challenge signing, theming, events, and verification."
+description: "Use when embedding Cherry Chat into a web, React Native, or Flutter app with @cherrydotfun/chat-embed-sdk. Detect the host platform first, then follow exactly one path: web (the SDK directly) or mobile (WebView host page + native signing bridge). Covers the two auth modes it documents in full (wallet-only, app-trusted+wallet), backend token generation, wallet challenge signing, theming, events, and verification."
 ---
 
 # Cherry Embed SDK Integration
@@ -28,7 +28,7 @@ Inspect the host app before giving code:
 - Where the widget should mount: inline or floating on web; which screen hosts the WebView on mobile.
 - Existing Solana wallet integration and how the wallet address/signing API is exposed.
 - Whether the host has a backend that can keep a Cherry app secret private.
-- Requested auth mode: `wallet-only` (no backend) or `app-trusted+wallet` (backend-signed token + wallet signature). Same choice on both paths.
+- Requested auth mode: `wallet-only` (no backend) or `app-trusted+wallet` (backend-signed token + wallet signature). Same choice on both paths. A third mode, `app-trusted` (backend token only, zero signature, no wallet on the page), is equally self-serve in the portal but is not detailed here — if the user wants it, follow the portal's generated setup prompt or `example/app-trusted/` in the SDK repo. All three are picked by the developer in the portal's auth-mode selector; none is admin-assigned, so never tell a user to ask the Cherry team to enable a mode.
 
 Ask only for missing operational values:
 - `appId` (the embed ID) and `roomId`. Embeds are created self-serve at https://portal.cherry.fun — Project → **Chat embeds** → **New embed**; the host origin must be in the embed's **Allowed origins**.
