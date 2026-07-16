@@ -114,8 +114,28 @@ app.get('/api/session', (req, res) => {
 // setToken() re-exchange happen. A real backend has no equivalent
 // client-triggerable endpoint; users switch identity by logging out and
 // back in through your real auth flow, not by POSTing a user id.
+//
+// For TESTING this endpoint also accepts `{ walletAddress }` to log the
+// mock session in as an ARBITRARY wallet — handy for exercising room
+// membership, rate limits, or moderation roles of a specific wallet.
+// This is exactly the "client picks the identity" hole the comments above
+// warn about: it must never exist in a production backend.
+const BASE58_WALLET_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 app.post('/api/session/switch', (req, res) => {
-  const { userId } = req.body || {};
+  const { userId, walletAddress } = req.body || {};
+
+  if (walletAddress !== undefined) {
+    if (typeof walletAddress !== 'string' || !BASE58_WALLET_RE.test(walletAddress.trim())) {
+      return res.status(400).json({
+        error: 'walletAddress must be a base58 Solana public key (32-44 chars)',
+      });
+    }
+    const custom = { id: 'custom', walletAddress: walletAddress.trim() };
+    DEMO_USERS.custom = custom;
+    activeSessionUserId = 'custom';
+    return res.json({ userId: custom.id, walletAddress: custom.walletAddress });
+  }
+
   if (!DEMO_USERS[userId]) {
     return res.status(400).json({ error: `Unknown demo user "${userId}"` });
   }

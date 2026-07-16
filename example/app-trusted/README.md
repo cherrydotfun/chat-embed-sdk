@@ -127,6 +127,12 @@ Open http://localhost:3000 — the chat mounts immediately, no click required.
 5. Chat is immediately authenticated. Click "Switch demo user" in the left
    panel to see `chat.setToken()` force a fresh exchange after the mock
    session's identity changes — this stands in for a real account switch.
+6. To test as a SPECIFIC wallet, paste any base58 wallet address into the
+   "Custom wallet address" field and click "Use wallet" — the mock session
+   logs in as that wallet and the chat re-exchanges. Useful for checking a
+   real wallet's room access, rate limits, or moderation role. TEST ONLY:
+   this is exactly the "client picks the identity" hole a production
+   backend must never have.
 
 ## Server-side restrictions
 
@@ -196,9 +202,10 @@ chat.setToken(freshEmbedToken);
 - In production, derive `walletAddress` (the token's `sub`) from your
   authenticated session, never from the request body. This demo simulates a
   session with an in-memory `DEMO_USERS` map and a `/api/session/switch`
-  endpoint that exists purely so you can see a re-exchange — delete both and
-  wire real session middleware before shipping (see the loud comment above
-  `getSessionUser()` in `server.js`).
+  endpoint that exists purely so you can see a re-exchange (including logging
+  in as an arbitrary wallet for testing) — delete both and wire real session
+  middleware before shipping (see the loud comment above `getSessionUser()`
+  in `server.js`).
 - JTI replay protection is enforced by the Cherry server (Redis-backed).
 - embedToken TTL is 5 minutes; the example auto-refreshes 30s before expiry.
 - Rotate `APP_SECRET` in your embed's settings at portal.cherry.fun if it

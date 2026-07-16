@@ -318,12 +318,26 @@
           <button class="btn btn-secondary" id="btn-switch" onclick="switchUser()">
             Switch demo user
           </button>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input
+              id="custom-wallet"
+              type="text"
+              placeholder="Custom wallet address (base58, for testing)"
+              spellcheck="false"
+              style="flex:1;min-width:0;font-family:monospace;font-size:11px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)"
+            />
+            <button class="btn btn-secondary" id="btn-custom-wallet" onclick="useCustomWallet()">
+              Use wallet
+            </button>
+          </div>
           <p style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-top:4px">
             The embed token's <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">sub</code>
             is always read from this server-side session — never from a
             request body. "Switch demo user" flips the mock session and
             calls <code style="font-size:10px;background:var(--surface2);padding:1px 4px;border-radius:3px">chat.setToken()</code>
-            so you can watch a re-exchange happen.
+            so you can watch a re-exchange happen. "Use wallet" logs the mock
+            session in as an arbitrary wallet — TEST ONLY, a real backend must
+            never let the client pick the identity.
           </p>
         </div>
       </div>
@@ -506,6 +520,45 @@ async function switchUser() {
     }
   } catch (err) {
     log('session.switch.error', String(err));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// TEST ONLY — logs the mock session in as an arbitrary wallet so you can
+// exercise a specific wallet's room access / rate limits / moderation role.
+// Rides the same demo-only /api/session/switch endpoint; a production
+// backend must never let the client pick the identity like this.
+async function useCustomWallet() {
+  const btn = document.getElementById('btn-custom-wallet');
+  const input = document.getElementById('custom-wallet');
+  const walletAddress = input.value.trim();
+  if (!walletAddress) {
+    log('session.custom.error', 'enter a wallet address first');
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/session/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'switch failed');
+
+    sessionUser = await res.json();
+    document.getElementById('session-user').textContent = sessionUser.userId;
+    document.getElementById('session-wallet').textContent =
+      sessionUser.walletAddress.slice(0, 6) + '...' + sessionUser.walletAddress.slice(-4);
+    log('session.switched', 'custom wallet ' + sessionUser.walletAddress);
+
+    const newToken = await fetchEmbedToken();
+    if (chat) {
+      chat.setToken(newToken);
+      log('chat.setToken', 'forced re-exchange with custom wallet');
+    }
+  } catch (err) {
+    log('session.custom.error', String(err));
   } finally {
     btn.disabled = false;
   }
