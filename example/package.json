@@ -4,6 +4,7 @@
   "private": true,
   "description": "Runnable examples for the Cherry Embed auth modes",
   "scripts": {
+    "start:app-trusted": "node app-trusted/server.js",
     "start:app-trusted+wallet": "node \"app-trusted+wallet/server.js\"",
     "start:wallet-only": "node wallet-only/server.js"
   },

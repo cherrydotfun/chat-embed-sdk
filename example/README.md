@@ -1,23 +1,27 @@
 # Cherry Embed SDK — Examples
 
-Two self-contained examples, one for each public Cherry Embed `authMode`.
+Self-contained examples for the Cherry Embed `authMode`s. All three are
+self-serve: pick any of them in your embed's auth mode at portal.cherry.fun.
+They differ in what proves a user's identity, not in how you get access.
 
 ## Choose your authMode
 
-| | app-trusted+wallet | wallet-only |
-|---|:---:|:---:|
-| Host backend | required | not needed |
-| Wallet adapter | yes (Phantom) | yes (Phantom) |
-| `token` (embedToken) | yes | no |
-| `walletAddress` | required | required |
-| `onSignChallenge` | yes | yes |
-| User wallet popup | once per session | once per session |
-| Use case | Public 3rd-party (default) | Self-hosted widget, no backend |
+| | app-trusted | app-trusted+wallet | wallet-only |
+|---|:---:|:---:|:---:|
+| Self-serve at portal.cherry.fun | yes | yes | yes |
+| Host backend | required | required | not needed |
+| Wallet adapter | none | yes (Phantom) | yes (Phantom) |
+| `token` (embedToken) | yes | yes | no |
+| `walletAddress` | not sent by client | required | required |
+| `onSignChallenge` | never fires | yes | yes |
+| User wallet popup | none | once per session | once per session |
+| Use case | Internal/trusted-partner apps | Public 3rd-party (default) | Self-hosted widget, no backend |
 
 ## Examples
 
 | Directory | authMode | Backend | Description |
 |---|---|---|---|
+| [`app-trusted/`](./app-trusted/) | `app-trusted` | Express | Backend-only token, zero signature, no wallet. |
 | [`app-trusted+wallet/`](./app-trusted+wallet/) | `app-trusted+wallet` | Express | Backend token + Phantom signature. |
 | [`wallet-only/`](./wallet-only/) | `wallet-only` | None (static) | Phantom only, no backend needed. |
 | [`react-native/`](./react-native/) | any | Depends on mode | React Native WebView + native wallet signing (MWA / deeplink). Hosted & bundled host page. |
@@ -63,6 +67,15 @@ cp .env.example .env
 
 ### 4. Run an example
 
+**app-trusted** (backend only, no wallet — set your embed's auth mode to
+`app-trusted` at portal.cherry.fun first, see
+[`app-trusted/README.md`](./app-trusted/README.md)):
+
+```bash
+npm run start:app-trusted
+# open http://localhost:3000
+```
+
 **app-trusted+wallet** (backend + Phantom):
 
 ```bash
@@ -84,10 +97,17 @@ npm run start:wallet-only
 
 ## Detailed documentation
 
+- [app-trusted/README.md](./app-trusted/README.md) — setup, flow, trust model
 - [app-trusted+wallet/README.md](./app-trusted+wallet/README.md) — setup, flow, Phantom integration
 - [wallet-only/README.md](./wallet-only/README.md) — setup, static serving, limitations
 
 ## When to choose which mode
+
+**app-trusted** — your backend already fully authenticates users through
+your own system and a wallet popup is unacceptable UX (internal tools,
+trusted partners). It drops the wallet signature entirely, so Cherry trusts
+whatever wallet your backend asserts: choose it only when your own login is
+the source of truth.
 
 **app-trusted+wallet** — your users have Solana wallets and you want the
 strongest security: the host backend proves the app is legitimate (appSecret),
@@ -106,7 +126,7 @@ Key variables:
 | Variable | Required by | Description |
 |---|---|---|
 | `APP_ID` | all | Your embed ID from [portal.cherry.fun](https://portal.cherry.fun) |
-| `APP_SECRET` | app-trusted+wallet | HS256 signing secret — server-side only |
+| `APP_SECRET` | app-trusted, app-trusted+wallet | HS256 signing secret — server-side only |
 | `CHERRY_EMBED_URL` | all | Embed iframe URL (default: https://embed.cherry.fun) |
 | `PORT` | all | Example server port (default: 3000) |
 
@@ -114,8 +134,8 @@ Key variables:
 
 - [ ] `.env` is NOT committed to git (it is in `.gitignore`)
 - [ ] `APP_SECRET` is never logged or exposed to the browser
-- [ ] In app-trusted+wallet mode: derive `walletAddress` from your server
-      session, not from the request body
+- [ ] In app-trusted / app-trusted+wallet mode: derive `walletAddress` (the
+      token's `sub`) from your server session, not from the request body
 - [ ] Add your production origin to **Allowed origins** in your embed's
       settings at portal.cherry.fun
 - [ ] Use Redis or a database for session storage (not in-memory Map)

@@ -1,6 +1,6 @@
 ---
 name: cherry-embed-integration
-description: "Use when embedding Cherry Chat into a web, React Native, or Flutter app with @cherrydotfun/chat-embed-sdk. Detect the host platform first, then follow exactly one path: web (the SDK directly) or mobile (WebView host page + native signing bridge). Covers the two public auth modes (wallet-only, app-trusted+wallet), backend token generation, wallet challenge signing, theming, events, and verification."
+description: "Use when embedding Cherry Chat into a web, React Native, or Flutter app with @cherrydotfun/chat-embed-sdk. Detect the host platform first, then follow exactly one path: web (the SDK directly) or mobile (WebView host page + native signing bridge). Covers the two auth modes it documents in full (wallet-only, app-trusted+wallet), backend token generation, wallet challenge signing, theming, events, and verification."
 ---
 
 # Cherry Embed SDK Integration
@@ -28,7 +28,7 @@ Inspect the host app before giving code:
 - Where the widget should mount: inline or floating on web; which screen hosts the WebView on mobile.
 - Existing Solana wallet integration and how the wallet address/signing API is exposed.
 - Whether the host has a backend that can keep a Cherry app secret private.
-- Requested auth mode: `wallet-only` (no backend) or `app-trusted+wallet` (backend-signed token + wallet signature). Same choice on both paths.
+- Requested auth mode: `wallet-only` (no backend) or `app-trusted+wallet` (backend-signed token + wallet signature). Same choice on both paths. A third mode, `app-trusted` (backend token only, zero signature, no wallet on the page), is equally self-serve in the portal but is not detailed here — if the user wants it, follow the portal's generated setup prompt or `example/app-trusted/` in the SDK repo. All three are picked by the developer in the portal's auth-mode selector; none is admin-assigned, so never tell a user to ask the Cherry team to enable a mode.
 
 Ask only for missing operational values:
 - `appId` (the embed ID) and `roomId`. Embeds are created self-serve at https://portal.cherry.fun — Project → **Chat embeds** → **New embed**; the host origin must be in the embed's **Allowed origins**.
@@ -258,11 +258,22 @@ Full guide: `docs/react-native.md` in the SDK repo, or https://portal.cherry.fun
 
 - Never expose `appSecret` in browser code, static HTML, mobile bundles, logs, or frontend env vars.
 - Add the host origin to the embed's **Allowed origins** at portal.cherry.fun.
-- Token `sub` must be a valid Solana public key.
+- Token `sub` must be a valid Solana public key, derived from the host's own authenticated session — never trust it from the request body. Room access, rate limits, and moderation permissions are all enforced against the wallet address in the token, so an un-derived `sub` lets a client spoof another wallet's identity and inherit its access.
 - Mint embed tokens fresh right before `mount()`; do not cache them. Session renewal afterwards is automatic.
 - Include `jti` in backend-issued tokens.
 - Register `signChallengeHandler` in the constructor for any flow that sets `walletAddress` during initial mount.
 - The iframe bridge protocol uses `id` for request correlation, not `requestId`.
+
+## Server-Side Restrictions
+
+These apply to every auth mode (`wallet-only`, `app-trusted+wallet`, `app-trusted`) and are expected behavior, not bugs — surface them in the host UI rather than debugging them as integration errors:
+
+- **Room access is allow-listed and fail-closed.** An app's `allowedRoomIds` (set at portal.cherry.fun) controls every room the chat can open. An empty list denies **all** rooms (`403`), not the reverse — never tell a user "leave it empty for public access."
+- **`403`** — either a room outside `allowedRoomIds`, or an in-iframe moderation action (kick/ban/mute/set-role/pin/delete-others' messages), which is disabled by default. Ask Cherry admins to enable moderation for the app, or perform moderation server-to-server via the Apps API bot keys instead.
+- **`429`** — the default per-user (~20 messages/min) or per-app (~600 messages/min) rate limit was exceeded. Cherry admins can raise these per app.
+- **`400`** — a message exceeded the default 2000-character limit.
+- **Cherry JWT TTL can be shorter than 15 minutes** (per-app configurable 5–15 min by Cherry admins). Refresh-token renewal already handles this automatically — no code change needed.
+- **Attachment/media upload from the embed can be disabled per app** by Cherry admins (enabled by default) — don't assume it's always available.
 
 ## Verification
 
