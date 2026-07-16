@@ -5,8 +5,9 @@
  *
  * authMode: app-trusted (pure, zero-signature)
  *
- * This mode is NOT self-serve — it is assigned by Cherry admins on request
- * (see README.md). The host backend is the SOLE source of trust: it issues
+ * Pick this mode yourself under "Who signs your users in?" when you configure
+ * an embed in the portal (see README.md). The host backend is the SOLE source
+ * of trust: it issues
  * an embedToken asserting the user's walletAddress, and Cherry accepts it
  * with no independent proof of wallet ownership. There is no wallet
  * connect, no signChallenge, no wallet popup anywhere in this flow.

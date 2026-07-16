@@ -96,12 +96,18 @@ cp .env.example .env
 # you keep a dedicated embed per mode — see .env.example)
 ```
 
-`.env.example` ships with `DEMO_SESSION_SWITCH=true`, which turns on the
-test-only identity switch described under
-[Demo identity switch](#demo-identity-switch-test-only-opt-in) below. If you
-copied `.env` before that flag existed, add it by hand — otherwise the
-"Switch demo user" / "Use wallet" controls are hidden and the example runs
-with its default demo session (which is the correct production shape).
+Out of the box the example runs with its default demo session and the
+"Switch demo user" / "Use wallet" controls hidden — that is the correct
+production shape. To test as an arbitrary wallet, turn the test-only identity
+switch on **for that run only** (never in `.env`, which a `cp` step would
+silently spread):
+
+```bash
+DEMO_SESSION_SWITCH=true npm run start:app-trusted
+```
+
+See [Demo identity switch](#demo-identity-switch-test-only-opt-in) below for
+what it exposes and why it is off by default.
 
 ### 3. Build the SDK (if not already built)
 
@@ -165,17 +171,18 @@ token for any wallet using your real `APP_SECRET`. A production backend
 derives the wallet from its own authenticated session and has no
 client-triggerable identity switch at all.
 
-Four things keep it from being inherited by accident:
+Five things keep it from being inherited by accident:
 
 | Guard | Behavior |
 | --- | --- |
+| Off by default | `.env.example` ships it commented out, so `cp .env.example .env` can never enable it. Turn it on per run instead. |
 | `DEMO_SESSION_SWITCH` env flag | Route is registered **only** when set to `true`. Unset → the path 404s; the handler is never attached. |
 | `NODE_ENV=production` | Route is **never** registered, flag or not. The server logs a warning at startup if the flag was set. |
 | Loopback bind | `HOST` defaults to `127.0.0.1`, so the route is not reachable from the network. |
 | Startup banner | The server prints a loud warning whenever the switch is live. |
 
 ```bash
-# enabled (default in .env.example — the UI shows the switch controls)
+# enabled for this run only — the UI shows the switch controls
 DEMO_SESSION_SWITCH=true npm run start:app-trusted
 
 # disabled (production shape — /api/session/switch 404s, controls hidden)
