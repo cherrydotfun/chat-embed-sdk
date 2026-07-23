@@ -7,6 +7,14 @@
 export interface EmbedTheme {
   mode?: 'dark' | 'light';
 
+  /**
+   * Curated brand gradients on the own bubble + send button. Post-v4 the
+   * derivation default is FLAT, so `gradients: 'on'` must be sent explicitly
+   * to restore the sweep; `'off'` pins a flat solid fill. Honoured by the
+   * embed's setTheme sanitizer.
+   */
+  gradients?: 'on' | 'off';
+
   primaryColor?: string;
   accentColor?: string;
   backgroundColor?: string;
@@ -62,6 +70,23 @@ export interface EmbedTheme {
 
   fontFamily?: string;
   fontSize?: 'sm' | 'md' | 'lg';
+}
+
+/**
+ * Host-controllable layout of the embed chrome. Mirrors the SDK's `EmbedLayout`
+ * but exposes ONLY the fields the embed's `sanitizeLayoutParams` honours today
+ * — the deprecated toggles (showAvatars / showTimestamps / showReactions /
+ * maxHeight) are dropped by the sanitizer, so the demo does not surface them.
+ */
+export interface EmbedLayout {
+  /** Show the room header bar. */
+  showHeader?: boolean;
+  /** Override the header title (stripped of <>&", capped at 120 chars). Empty → room default. */
+  headerTitle?: string;
+  /** Show the member-count row nested in the header. */
+  showMemberCount?: boolean;
+  /** Show the message composer. */
+  showInput?: boolean;
 }
 
 export type PresetId = 'cherry' | 'peach' | 'linen' | 'onyx' | 'solflare' | 'jupiter';

@@ -8,19 +8,39 @@
   font-display: swap;
 }
 
+/* ── Cherry portal design tokens ─────────────────────────────────────────
+   Values taken verbatim from self-service-portal/src/index.css (dark theme)
+   + tailwind.config.js (radii). True-black base, #1b1b1d cards, white-on-black
+   primary CTA (the signature inversion), Cherry pink (#ff5ba8) reserved for
+   brand marks + active accents — never chrome. Inter everywhere, no glow. */
 :root {
-  --page-bg: #0b0b10;
-  --pane-bg: #14141c;
-  --pane-bg-elev: #1a1a25;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --text: #ececf2;
-  --text-muted: rgba(236, 236, 242, 0.62);
-  --text-faint: rgba(236, 236, 242, 0.42);
-  --accent: #b054f7;
-  --accent-strong: #c875ff;
-  --green: #4ade80;
-  --radius: 12px;
+  --bg: #000000;          /* true black (OLED-friendly) */
+  --fg: #ffffff;          /* primary text */
+  --card: #1b1b1d;        /* cards / elevated surfaces */
+  --fill: #262629;        /* hover / pressed fill */
+  --muted: #9a9aa0;       /* secondary text */
+  --faint: #838388;       /* placeholder / disabled (WCAG AA) */
+  --line: #2c2c2e;        /* hairlines, inputs, borders */
+  --brand: #ff5ba8;       /* Cherry pink — meaning / active accent only */
+  --brand-press: #c9337a;
+  --brand-soft: rgba(255, 91, 168, 0.14);
+  --primary: #ffffff;     /* white-on-black CTA */
+  --primary-fg: #000000;
+  --ok: #2ed06b;
+  --warn: #f5b445;
+  --err: #ff453a;
+  --ring: rgba(255, 91, 168, 0.4);
+
+  /* radii — tailwind.config.js borderRadius scale */
+  --r-sm: 10px;
+  --r-md: 13px;
+  --r-lg: 16px;
+  --r-card: 20px;
+  --r-card-lg: 26px;
+  --r-pill: 999px;
+
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
 }
 
 *,
@@ -32,27 +52,84 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--page-bg);
-  color: var(--text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: var(--brand-soft);
+  color: var(--fg);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
 }
 code {
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  font-size: 0.875em;
-  background: rgba(255, 255, 255, 0.07);
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--fill);
+  padding: 1px 5px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+/* Strip native colour-swatch chrome so only our wrapper border shows. */
+input[type='color'] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type='color']::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+input[type='color']::-webkit-color-swatch {
+  border: none;
+  border-radius: 7px;
+}
+input[type='color']::-moz-color-swatch {
+  border: none;
+  border-radius: 7px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Page layout ─────────────────────────────────────────────────────── */
@@ -60,23 +137,18 @@ button {
 .page {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(380px, 1fr) minmax(520px, 1.3fr);
+  grid-template-columns: minmax(400px, 1fr) minmax(520px, 1.25fr);
   gap: 0;
 }
 
 .left-pane {
-  padding: 36px 28px 60px;
-  border-right: 1px solid var(--border);
+  padding: 32px 28px 64px;
+  border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 22px;
   overflow-y: auto;
   max-height: 100vh;
-  background: linear-gradient(
-    180deg,
-    rgba(176, 84, 247, 0.05) 0%,
-    transparent 380px
-  );
 }
 
 .right-pane {
@@ -90,28 +162,649 @@ button {
 
 .chat-frame {
   flex: 1;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card-lg);
   overflow: hidden;
-  background: #0a0a0f;
+  background: var(--bg);
   display: flex;
   min-height: 0;
-  /* Anchor for absolutely-positioned host chrome (collapsible bubble,
-   * draggable handle hint) so they resolve against the chat-frame box
-   * instead of leaking up to the viewport. */
   position: relative;
 }
 
+/* ── Card (portal surface language: borderless elevated) ─────────────── */
+.card {
+  background: var(--card);
+  border: none;
+  border-radius: var(--r-card);
+  padding: 18px 20px;
+}
+
+/* ── Section header (shared) ─────────────────────────────────────────── */
+.section-header {
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.section-header .sh-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-header h2 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.section-header p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Buttons (portal variants — capsule everything) ──────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease;
+}
+.btn:hover:not(:disabled) {
+  background: var(--fill);
+}
+.btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: var(--primary-fg);
+}
+.btn-primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.9);
+}
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--fg);
+}
+.btn-sm {
+  padding: 4px 11px;
+  font-size: 12px;
+}
+
+/* ── ℹ click-tooltip (holds long explainers off the page) ────────────── */
+.info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.info-tip {
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.info-tip:hover {
+  color: var(--brand);
+  border-color: var(--ring);
+}
+.info-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 320px;
+  max-width: 76vw;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+.info-pop[hidden] {
+  display: none;
+}
+.info-pop code {
+  color: var(--muted);
+  background: var(--fill);
+  font-size: 10.5px;
+}
+.info-pop b {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ── Marketing / hero (restrained, portal-plain) ─────────────────────── */
+.marketing {
+  display: flex;
+  flex-direction: column;
+}
+.marketing-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.marketing-eyebrow .brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg);
+}
+.marketing-eyebrow .brand-mark img {
+  width: 20px;
+  height: 20px;
+}
+.marketing-eyebrow .brand-mark em {
+  font-style: normal;
+  color: var(--brand);
+}
+.marketing-eyebrow-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  text-decoration: none;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.marketing-eyebrow-link:hover {
+  color: var(--fg);
+  background: var(--fill);
+}
+.marketing-eyebrow-link svg {
+  flex-shrink: 0;
+}
+.marketing-title {
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin: 0 0 12px;
+  color: var(--fg);
+}
+.marketing-lede {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+  margin: 0;
+  max-width: 58ch;
+}
+.marketing-lede code {
+  font-size: 0.85em;
+}
+
+/* Integration snippet under the hero. */
+.snippet {
+  margin-top: 18px;
+  background: var(--card);
+  border-radius: var(--r-card);
+  padding: 4px 6px 6px;
+}
+.snippet > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  user-select: none;
+  list-style: none;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.snippet > summary::-webkit-details-marker {
+  display: none;
+}
+.snippet > summary::before {
+  content: '▸';
+  color: var(--brand);
+  font-size: 10px;
+}
+.snippet[open] > summary::before {
+  content: '▾';
+}
+.snippet[open] > summary {
+  color: var(--fg);
+}
+.snippet pre {
+  margin: 0 6px 6px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #ededf2;
+}
+.snippet pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.snippet-foot {
+  margin: 10px 12px 4px;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.5;
+}
+.snippet-link {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.snippet-link:hover {
+  color: var(--brand);
+}
+
+/* ── Preset / display-mode grids ─────────────────────────────────────── */
+.switcher-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--bg);
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.preset-card:hover {
+  background: var(--fill);
+}
+.preset-card-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.preset-swatches {
+  height: 34px;
+  border-radius: var(--r-sm);
+}
+.preset-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.preset-blurb {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.mode-glyph {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+.preset-card-active .mode-glyph {
+  color: var(--brand);
+}
+
+/* ── Theme editor ────────────────────────────────────────────────────── */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.editor-toolbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+}
+
+/* Sub-group title (portal idiom) */
+.sg-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+.sg-title:first-child {
+  margin-top: 0;
+}
+
+/* Collapsible advanced groups */
+.editor-group {
+  border-top: 1px solid var(--line);
+  margin-top: 14px;
+  padding-top: 12px;
+}
+.editor-group > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-group > summary::-webkit-details-marker {
+  display: none;
+}
+.editor-group > summary::before {
+  content: '▸';
+  color: var(--brand);
+  font-size: 10px;
+}
+.editor-group[open] > summary::before {
+  content: '▾';
+}
+.editor-group > summary:hover {
+  color: var(--fg);
+}
+.editor-group .summary-hint {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+.editor-group-body {
+  padding-top: 8px;
+}
+
+/* Row: name | text | swatch | reset */
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+}
+.row .pname {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row .pname-label {
+  font-size: 12px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row .pname-key {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row input[type='text'] {
+  width: 130px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.row input[type='text']:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.row input[type='text'].invalid {
+  border-color: var(--err);
+  color: var(--err);
+}
+.row input[type='text'].invalid:focus {
+  border-color: var(--err);
+  box-shadow: 0 0 0 3px rgba(255, 69, 58, 0.32);
+}
+/* Derived (engine-computed) value prefilled from themeApplied — grayed +
+   italic to read as "not yours yet"; editing promotes it to explicit. */
+.row input[type='text'].derived {
+  color: var(--faint);
+  font-style: italic;
+}
+.row input[type='color'] {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  cursor: pointer;
+}
+.row select {
+  width: 130px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: var(--r-sm);
+  padding: 5px 8px;
+  font-size: 11px;
+}
+.row select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.row .reset-btn {
+  padding: 3px 7px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+}
+.row .reset-btn:hover {
+  color: var(--brand);
+  background: var(--fill);
+}
+.row .reset-spacer {
+  width: 25px;
+}
+/* "preset" tag shown on Advanced rows whose value comes from the active
+   preset (explicit, sent) rather than a user override or the engine. */
+.pill-tag {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  color: var(--faint);
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* Segmented toggle (dark/light, on/off, sm/md/lg) */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  background: var(--bg);
+}
+.segmented button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 13px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+.segmented button.on {
+  background: var(--brand);
+  color: #fff;
+}
+.segmented button.on:hover {
+  background: var(--brand-press);
+}
+.segmented button:not(.on):hover {
+  color: var(--fg);
+}
+
+/* ── Live payload chip + engine badge ────────────────────────────────── */
+.payload-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.pc-label {
+  color: var(--faint);
+}
+.pc-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.pc-none {
+  color: var(--faint);
+  font-style: italic;
+}
+.pchip {
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  background: var(--fill);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.pchip.seed {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--ring);
+  font-weight: 600;
+}
+.engine-badge {
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.engine-badge.on {
+  background: var(--brand);
+  color: #fff;
+}
+.engine-badge.off {
+  background: var(--fill);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+/* ── Computed-vars read-only dump ────────────────────────────────────── */
+.cv-list {
+  margin-top: 8px;
+  max-height: 280px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cv-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.cv-name {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.cv-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+  align-self: center;
+}
+.cv-val {
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cv-empty {
+  font-size: 11.5px;
+  color: var(--faint);
+  padding: 8px 0;
+  line-height: 1.5;
+}
+
+/* ── Chat stage states ───────────────────────────────────────────────── */
 .demo-chat-container {
   flex: 1;
   display: flex;
 }
-
-/* Inline + collapsible + resizable: force the iframe to fill its parent.
- * The `!important` defends against any inline width/height the SDK might
- * leak in — but ONLY on these layout-bound modes. The floating mode
- * relies on the SDK's `position: fixed; width: 380px; height: 520px;`
- * inline styles, so do NOT apply this rule there. */
 .demo-chat-inline iframe,
 .demo-chat-collapsible iframe,
 .demo-chat-resizable iframe {
@@ -121,25 +814,34 @@ button {
   border: 0;
   background: transparent;
 }
-
-/* Floating: leave SDK iframe styles untouched (fixed-positioned 380×520
- * in the viewport corner). Do NOT use `display: contents` here — Chrome
- * can collapse the container's box and orphan the iframe in a way that
- * makes the SDK's `display: none` not stick. */
 .demo-chat-floating {
-  width: 0;
-  height: 0;
-  flex: 0 0 0;
-  overflow: visible;
+  display: contents;
 }
 
-/* ── Display modes ───────────────────────────────────────────────────── */
+.chat-loading,
+.chat-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
+  gap: 8px;
+}
+.chat-error h3 {
+  color: var(--fg);
+  font-size: 15px;
+}
+.chat-error-hint {
+  font-size: 12px;
+  color: var(--faint);
+  max-width: 360px;
+  line-height: 1.55;
+}
 
-/* Resizable: a wrapper around the iframe container that owns both the
- * `resize: both` corner grip AND a drag handle on top so the panel can be
- * repositioned within the chat-frame. The transform (drag offset) is
- * applied inline from React. min/max keep the widget usable on both small
- * panes and full-screen demos. */
+/* ── Resizable mode ──────────────────────────────────────────────────── */
 .demo-chat-stage-resizable {
   flex: 0 1 auto;
   align-self: flex-start;
@@ -151,22 +853,16 @@ button {
   min-height: 360px;
   max-width: 100%;
   max-height: calc(100vh - 48px);
-  border-radius: var(--radius);
-  background: #0a0a0f;
+  border-radius: var(--r-card);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
-  /* Wrapper is now the draggable element — `transform` is set inline. */
   will-change: transform;
 }
-
-/* The inner iframe container fills the wrapper below the drag handle. */
 .demo-chat-stage-resizable > .demo-chat-resizable {
   flex: 1;
   min-height: 0;
 }
-
-/* Drag handle on top of the resizable panel. Pointer events bubble up to
- * React handlers, which translate the wrapper. */
 .demo-chat-drag-handle {
   flex: 0 0 auto;
   height: 28px;
@@ -174,12 +870,12 @@ button {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   user-select: none;
   touch-action: none;
@@ -187,7 +883,7 @@ button {
 }
 .demo-chat-drag-handle:active {
   cursor: grabbing;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill);
 }
 .demo-chat-drag-grip {
   display: inline-flex;
@@ -196,129 +892,53 @@ button {
 }
 .demo-chat-drag-grip span {
   display: block;
-  width: 16px;
+  width: 15px;
   height: 2px;
   border-radius: 999px;
-  background: var(--text-faint);
+  background: var(--faint);
 }
 .demo-chat-drag-label {
-  color: var(--text-faint);
+  color: var(--faint);
 }
 
-/* Floating: SDK positions the iframe `position: fixed` in the viewport
- * corner. The container itself is just a DOM anchor — keep it out of
- * the chat-frame layout so the right pane can show the launcher hint. */
-.demo-chat-floating {
-  display: contents;
-}
-
+/* ── Floating launcher (flat, no glow) ───────────────────────────────── */
 .demo-chat-launcher {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 84px;
-  height: 84px;
+  width: 60px;
+  height: 60px;
   border-radius: 9999px;
   border: 0;
-  /* Background + colour are also set inline from React based on the
-   * effective theme so the launcher follows the active palette. The CSS
-   * gradient is the fallback when no theme is applied. */
-  background: linear-gradient(135deg, #ff1493 0%, #c026d3 100%);
+  background: var(--brand);
   color: #fff;
-  font-size: 36px;
+  font-size: 26px;
   line-height: 1;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45),
-              0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   cursor: pointer;
-  /* Above the iframe (DemoChat sets iframe z-index to 999998 in floating
-   * mode). The SDK's prod default is 2147483647 max-int, which would
-   * overlay the launcher and trap users with no way to close the chat. */
   z-index: 999999;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease;
 }
 .demo-chat-launcher:hover {
-  transform: translateY(-2px) scale(1.04);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42),
-              0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  transform: translateY(-2px);
+  background: var(--brand-press);
 }
-
-/* Closed state runs an attention-grab loop — short wiggle + an outward
- * ring pulse every 5s. Only fires when the chat is closed; once the
- * user has opened it once we don't want the dialog's close button to
- * keep dancing.
- *
- * `--launcher-pulse` is set inline by React (= active theme primary)
- * so the halo picks up the palette. We also wrap the keyframes in a
- * `@media (prefers-reduced-motion)` opt-out so users with
- * vestibular-motion sensitivity don't get the bounce.
- */
-.demo-chat-launcher:not(.demo-chat-launcher-open) {
-  animation: demoChatLauncherAttention 4.8s ease-in-out infinite;
-}
-
-@keyframes demoChatLauncherAttention {
-  /* Quiet for the first 70% — gives the eye a rest between bursts. */
-  0%, 70%, 100% {
-    transform: translateY(0) scale(1) rotate(0deg);
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.35),
-      0 0 0 0 rgba(var(--launcher-pulse-rgb, 255, 20, 147), 0);
-  }
-  /* The "look at me" burst: small wiggle + ring expand. */
-  78% {
-    transform: translateY(-2px) scale(1.05) rotate(-6deg);
-  }
-  82% {
-    transform: translateY(-2px) scale(1.05) rotate(6deg);
-  }
-  86% {
-    transform: translateY(-2px) scale(1.05) rotate(-3deg);
-  }
-  90% {
-    transform: translateY(0) scale(1.04) rotate(0deg);
-    box-shadow:
-      0 8px 24px rgba(0, 0, 0, 0.35),
-      0 0 0 12px var(--launcher-pulse, rgba(255, 20, 147, 0.0));
-    /* The ring's alpha lives in the colour itself when --launcher-pulse
-     * is a hex/rgb literal — keyframe animation can't drive `0 → 0.x`
-     * alpha cleanly across browsers, so we settle for a brief solid
-     * tinted ring at the burst peak. */
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .demo-chat-launcher:not(.demo-chat-launcher-open) {
-    animation: none;
-  }
-}
-
-/* When the chat is open, lift the close button ABOVE the iframe top
- * edge so it sits outside the chat surface — otherwise it overlaps the
- * compose area / Connect-wallet CTA which is the "active zone" of the
- * widget. SDK floating-right defaults: iframe 380×520 anchored at
- * bottom:20 right:20 → top edge sits 540px from viewport bottom; we
- * place the button 12px above that. Opaque dark bg (no alpha) so the
- * button reads as a distinct system control, not as a translucent
- * pseudo-overlay. */
 .demo-chat-launcher-open {
   bottom: 552px;
-  width: 36px;
-  height: 36px;
-  font-size: 18px;
-  background: #14141c;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  width: 34px;
+  height: 34px;
+  font-size: 17px;
+  background: var(--card);
+  border: 1px solid var(--line);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 .demo-chat-launcher-open:hover {
-  background: #1c1c25;
-  transform: scale(1.08);
+  background: var(--fill);
+  transform: none;
 }
-
-/* Hint shown inside the chat-frame when the floating widget is closed
- * — the otherwise-empty area would read like a broken layout. */
 .demo-chat-floating-hint {
   flex: 1;
   display: flex;
@@ -328,42 +948,250 @@ button {
   justify-content: center;
   text-align: center;
   padding: 32px;
-  color: var(--text-muted);
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-card);
   margin: 0;
 }
 .demo-chat-floating-hint strong {
-  color: var(--text);
+  color: var(--fg);
   font-size: 14px;
   font-weight: 600;
 }
 
-.chat-loading,
-.chat-error {
+/* ── Collapsible mode ────────────────────────────────────────────────── */
+.demo-chat-collapsible {
   flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.demo-chat-collapsible-closed iframe {
+  visibility: hidden;
+}
+.demo-chat-collapsible-tab {
+  flex: 0 0 44px;
+  align-self: stretch;
+  width: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  color: var(--text-muted);
-  padding: 24px;
-  gap: 8px;
+  gap: 12px;
+  padding: 18px 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.16s ease, color 0.16s ease;
+  position: relative;
+  z-index: 2;
 }
-.chat-error h3 {
-  margin: 0;
-  color: var(--text);
-  font-size: 16px;
+.demo-chat-collapsible-tab:hover {
+  background: var(--brand-press);
 }
-.chat-error-hint {
-  font-size: 12px;
-  color: var(--text-faint);
-  max-width: 360px;
+.demo-chat-collapsible-tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.demo-chat-collapsible-tab-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+.demo-chat-collapsible-tab-open {
+  flex-basis: 28px;
+  width: 28px;
+  padding: 12px 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+.demo-chat-collapsible-tab-open:hover {
+  background: var(--fill);
+  color: var(--fg);
+}
+.demo-chat-collapsible-tab-open .demo-chat-collapsible-tab-icon {
+  background: transparent;
+  width: 22px;
+  height: 22px;
+}
+.demo-chat-collapsible-hint {
+  position: absolute;
+  top: 50%;
+  left: 72px;
+  right: 24px;
+  transform: translateY(-50%);
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+  z-index: 1;
+}
+.demo-chat-collapsible-hint strong {
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
 }
 
+/* ── Mobile mode-switch hint ─────────────────────────────────────────── */
+.chat-below-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid var(--line);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  pointer-events: none;
+  z-index: 50;
+  white-space: nowrap;
+  animation: chatBelowHintFade 2500ms ease forwards;
+}
+@keyframes chatBelowHintFade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  85% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+/* ── Copy-feedback line ──────────────────────────────────────────────── */
+.copy-hint {
+  font-size: 11px;
+  color: var(--ok);
+  align-self: center;
+}
+
+/* ── Cherry brand mark inside the round bubbles (launcher + collapsed) ─── */
+.demo-chat-bubble-logo {
+  object-fit: contain;
+  image-rendering: pixelated; /* keep the pixel-art mark crisp on retina */
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+.demo-chat-launcher .demo-chat-bubble-logo {
+  width: 34px;
+  height: 34px;
+}
+.demo-chat-collapsible-tab-icon .demo-chat-bubble-logo {
+  width: 22px;
+  height: 22px;
+}
+
+/* ── Handshake watchdog caption (boot loader never resolved) ──────────────
+ * Not a banner. The iframe's OWN cherry boot-loader mark keeps spinning in the
+ * centre of the frame; this is just a small secondary caption anchored just
+ * below that mark, so the stalled state reads as "mark + caption", never a
+ * block replacing the visual. */
+.handshake-hint {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 34px);
+  transform: translateX(-50%);
+  z-index: 40;
+  width: max-content;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 0 16px;
+  text-align: center;
+  pointer-events: none;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+.handshake-hint strong {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.handshake-hint span {
+  display: block;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.handshake-hint code {
+  font-size: 10px;
+  background: var(--fill);
+  color: var(--muted);
+}
+
+/* ── Layout card: header-title input ─────────────────────────────────── */
+.layout-title-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  border-radius: var(--r-sm);
+  padding: 6px 9px;
+  font-size: 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.layout-title-input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+.layout-title-input::placeholder {
+  color: var(--faint);
+}
+.layout-title-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Seed-pinned contextual hint (preset masks derivation) ───────────── */
+.seed-pinned-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--brand-soft);
+  border: 1px solid var(--ring);
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.seed-pinned-hint span {
+  flex: 1 1 220px;
+}
+.seed-pinned-hint .btn {
+  flex: 0 0 auto;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
 @media (max-width: 960px) {
   .page {
     grid-template-columns: 1fr;
@@ -376,627 +1204,6 @@ button {
   .left-pane {
     max-height: none;
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
   }
-}
-
-/* ── Marketing block ─────────────────────────────────────────────────── */
-
-.marketing-eyebrow {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--accent);
-  font-weight: 600;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-/* Pill-shaped GitHub link in the top-right of the marketing eyebrow row.
- * Resets typography from the eyebrow's tight uppercase tracking so it
- * reads as a button/link, not a header continuation. */
-.marketing-eyebrow-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 8px;
-  font-size: 11.5px;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  text-decoration: none;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-.marketing-eyebrow-link:hover {
-  color: var(--text);
-  border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.06);
-}
-.marketing-eyebrow-link svg {
-  flex-shrink: 0;
-}
-.marketing-title {
-  font-size: 26px;
-  font-weight: 600;
-  line-height: 1.18;
-  letter-spacing: -0.015em;
-  margin: 0 0 14px;
-  color: var(--text);
-}
-.marketing-lede {
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--text-muted);
-  margin: 0 0 24px;
-  max-width: 56ch;
-}
-.marketing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-.marketing-card {
-  background: var(--pane-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-.marketing-card-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Small "optional" pill rendered inside a card title to flag a feature
- * that isn't required for the integration to work. */
-.marketing-tag {
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: 999px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border);
-}
-.marketing-card-body,
-.marketing-list {
-  font-size: 13px;
-  color: var(--text-muted);
-  line-height: 1.55;
-  margin: 0;
-}
-
-/* Inline link inside marketing copy. Stays in the warm-pink Cherry
- * brand family instead of inheriting the browser-default blue, which
- * read as broken on the dark cherry surface. */
-.marketing-link {
-  color: #ff5fa2;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  transition: color 0.15s ease;
-}
-.marketing-link:hover {
-  color: #ff86bd;
-}
-.marketing-list {
-  padding-left: 1em;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.marketing-list li strong {
-  color: var(--text);
-  font-weight: 600;
-}
-.marketing-snippet {
-  margin-top: 18px;
-  background: var(--pane-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
-}
-.marketing-snippet > summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 500;
-  user-select: none;
-}
-.marketing-snippet[open] > summary {
-  color: var(--text);
-  margin-bottom: 10px;
-}
-.marketing-snippet pre {
-  /* Mirror `.editor-snippet` styling — dark inset card so the code
-   * block reads as a distinct callout instead of plain prose. */
-  margin: 0;
-  padding: 10px 12px;
-  background: var(--page-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow-x: auto;
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text);
-}
-.marketing-snippet code {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
-}
-
-/* Caption line under the integration snippet pointing at the canonical
- * source on GitHub. Visible only when the user has expanded <details>,
- * so it surfaces exactly when they're inspecting integration code. */
-.marketing-snippet-source {
-  margin: 12px 0 0;
-  font-size: 12.5px;
-  color: var(--text-faint);
-  line-height: 1.5;
-}
-
-/* ── Section header (shared by switcher + editor) ────────────────────── */
-
-.section-header {
-  margin-bottom: 14px;
-}
-.section-header h2 {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text);
-}
-.section-header p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ── Theme switcher ──────────────────────────────────────────────────── */
-
-.switcher-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-.preset-card {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--pane-bg);
-  text-align: left;
-  transition:
-    border-color 0.15s ease,
-    transform 0.15s ease,
-    background 0.15s ease;
-}
-.preset-card:hover {
-  border-color: var(--border-strong);
-}
-.preset-card-active {
-  border-color: var(--accent);
-  background: var(--pane-bg-elev);
-  box-shadow: 0 0 0 1px var(--accent) inset;
-}
-.preset-swatches {
-  height: 36px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-}
-.preset-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.preset-blurb {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-/* ── Theme editor ────────────────────────────────────────────────────── */
-
-.editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.editor-toolbar {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-.editor-toolbar .reset-button {
-  margin-top: 0;
-}
-
-.reset-button {
-  margin-top: 10px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  background: var(--pane-bg);
-  color: var(--text);
-  border-radius: 6px;
-  font-size: 12px;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.reset-button:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: var(--pane-bg-elev);
-}
-.reset-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.editor-group {
-  background: var(--pane-bg);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.editor-group > summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 10px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text);
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.editor-group > summary::-webkit-details-marker {
-  display: none;
-}
-.editor-group > summary::after {
-  content: '+';
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 400;
-}
-.editor-group[open] > summary {
-  border-bottom: 1px solid var(--border);
-}
-.editor-group[open] > summary::after {
-  content: '−';
-}
-.editor-fields {
-  padding: 10px 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Generic field row (label left, control right). */
-.field {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 30px;
-}
-.field-label {
-  flex: 1;
-  font-size: 12px;
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.field-label-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-/* The exact `EmbedTheme` key for this field — shown as a copyable hint
- * next to each control so devs can map UI controls to API arguments. */
-.field-key {
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  font-size: 10px;
-  background: rgba(176, 84, 247, 0.1);
-  color: var(--accent-strong);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-weight: 500;
-  border: 1px solid rgba(176, 84, 247, 0.18);
-  cursor: help;
-  user-select: text;
-}
-.field-hint {
-  font-size: 10.5px;
-  color: var(--text-faint);
-  font-weight: 400;
-}
-
-/* Mini code snippet under the editor heading — shows the runtime API. */
-.editor-snippet {
-  margin: 8px 0 12px;
-  padding: 10px 12px;
-  background: var(--page-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--text);
-  overflow-x: auto;
-}
-.editor-snippet code {
-  background: transparent;
-  padding: 0;
-  font-size: inherit;
-  color: inherit;
-}
-.field-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.field-control input[type='color'] {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-}
-.field-control input[type='color']::-webkit-color-swatch-wrapper {
-  padding: 2px;
-}
-.field-control input[type='color']::-webkit-color-swatch {
-  border: 0;
-  border-radius: 4px;
-}
-.field-text {
-  width: 130px;
-  padding: 4px 8px;
-  font-family: ui-monospace, SF Mono, Menlo, monospace;
-  font-size: 11.5px;
-  background: var(--page-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-.field-text:focus {
-  border-color: var(--accent);
-}
-.field-text::placeholder {
-  color: var(--text-faint);
-}
-
-.field-control select {
-  padding: 4px 8px;
-  font-size: 12px;
-  background: var(--page-bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  outline: none;
-}
-
-.field-control input[type='range'] {
-  width: 160px;
-  accent-color: var(--accent);
-}
-.field-control input[type='checkbox'] {
-  accent-color: var(--accent);
-  width: 16px;
-  height: 16px;
-}
-
-/* Segmented control (e.g. dark/light, sm/md/lg). */
-.field-control-segmented {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.segmented {
-  background: transparent;
-  border: 0;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  padding: 4px 10px;
-  text-transform: lowercase;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.segmented + .segmented {
-  border-left: 1px solid var(--border);
-}
-.segmented-active {
-  background: var(--pane-bg-elev);
-  color: var(--text);
-  font-weight: 600;
-}
-.segmented:hover:not(.segmented-active) {
-  color: var(--text);
-}
-
-/* ── Collapsible display mode ────────────────────────────────────────── */
-
-/* Container fills whatever flex space is left after the side tab. The
- * iframe is mounted at full container size so its session is unaffected
- * by toggling — when closed we just visibility-hide it. */
-.demo-chat-collapsible {
-  flex: 1;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-.demo-chat-collapsible-closed iframe {
-  /* `visibility: hidden` (vs `display: none`) keeps the iframe laid out
-   * so its session/socket stay alive and re-show is instant. */
-  visibility: hidden;
-}
-
-/* The trigger is a vertical tab attached to the left edge of the
- * chat-frame, NOT a free-floating bubble. It's a real flex sibling of
- * the iframe container — so the chat is always to its right and the
- * tab never overlaps the surface, in either open or closed state.
- * Background / text colour come from the active theme via inline style. */
-.demo-chat-collapsible-tab {
-  flex: 0 0 44px;
-  align-self: stretch;
-  width: 44px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px 0;
-  border: 0;
-  border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, #ff1493 0%, #c026d3 100%);
-  color: #fff;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
-  /* Sit above the iframe so hover/focus states paint cleanly even though
-   * we're already a flex sibling (no actual overlap). */
-  position: relative;
-  z-index: 2;
-}
-.demo-chat-collapsible-tab:hover {
-  box-shadow: inset -4px 0 12px rgba(0, 0, 0, 0.18);
-}
-.demo-chat-collapsible-tab-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
-}
-.demo-chat-collapsible-tab-chevron {
-  /* Lone chevron stacked under the icon — points right (= open
-   * direction) so the affordance reads as "click to slide in". */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.85;
-}
-
-/* Open state: thinner, neutral so the eye lands on the chat surface
- * instead of the tab. The chevron icon swaps in via React. */
-.demo-chat-collapsible-tab-open {
-  flex-basis: 28px;
-  width: 28px;
-  padding: 12px 0;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-muted);
-}
-.demo-chat-collapsible-tab-open:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  box-shadow: none;
-}
-.demo-chat-collapsible-tab-open .demo-chat-collapsible-tab-icon {
-  background: transparent;
-  width: 22px;
-  height: 22px;
-}
-
-/* Hint shown beside the tab when collapsed — sits absolutely-positioned
- * over the empty container so it doesn't fight the flex layout. */
-.demo-chat-collapsible-hint {
-  position: absolute;
-  top: 50%;
-  left: 72px;
-  right: 24px;
-  transform: translateY(-50%);
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.5;
-  pointer-events: none;
-  z-index: 1;
-}
-.demo-chat-collapsible-hint strong {
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* ── Constructor intro (sits between Marketing and DisplayModeSelector) ─ */
-.construct-intro {
-  margin: 24px 0 18px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border);
-}
-.construct-intro h2 {
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.construct-intro p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-muted);
-  max-width: 52ch;
-}
-
-/* ── Mobile mode-switch hint (pill banner above the chat) ──────────────
- * Renders inside `.chat-frame` (which is `position: relative`) when the
- * user moves OUT of the `floating` launcher on a narrow viewport. App.tsx
- * also auto-scrolls the chat-frame into view; this pill is the secondary
- * affordance so the move reads as intentional. Auto-clears after 2.5s. */
-.chat-below-hint {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  padding: 8px 14px;
-  background: rgba(0, 0, 0, 0.78);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  border-radius: 999px;
-  pointer-events: none;
-  z-index: 50;
-  white-space: nowrap;
-  animation: chatBelowHintFade 2500ms ease forwards;
-}
-@keyframes chatBelowHintFade {
-  0%   { opacity: 0; transform: translate(-50%, -8px); }
-  10%  { opacity: 1; transform: translate(-50%, 0); }
-  85%  { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -4px); }
 }

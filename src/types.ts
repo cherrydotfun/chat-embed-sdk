@@ -1,6 +1,13 @@
 export interface EmbedTheme {
   mode?: 'dark' | 'light';
 
+  /**
+   * Curated brand gradients on the own bubble + send button. The derivation
+   * default is FLAT, so `'on'` must be sent explicitly to restore the sweep;
+   * `'off'` pins a flat solid fill. Honoured by the embed's setTheme sanitizer.
+   */
+  gradients?: 'on' | 'off';
+
   // ── Core palette (drive most derived colours) ─────────────────────────
   primaryColor?: string;
   accentColor?: string;
