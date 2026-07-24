@@ -29,15 +29,17 @@ interface DisplayModeSelectorProps {
 }
 
 /**
- * Concrete mount strategies for the chat iframe. Switching reuses
- * the same SDK config surface (`position`, `collapsed`, `chat.toggle()`)
- * so people can see the off-the-shelf options without reading the docs.
+ * Concrete mount strategies for the chat iframe. Switching reuses the same SDK
+ * config surface (`position`, `collapsed`, `chat.toggle()`) so people can see
+ * the off-the-shelf options without reading the docs.
  */
 export function DisplayModeSelector({ selected, onSelect }: DisplayModeSelectorProps) {
   return (
-    <section className="switcher">
+    <section className="card switcher">
       <div className="section-header">
-        <h2>Display mode</h2>
+        <div className="sh-title">
+          <h2>Display mode</h2>
+        </div>
         <p>How the widget mounts on the host page.</p>
       </div>
       <div className="switcher-grid">
@@ -81,8 +83,6 @@ function ModeIcon({ mode }: { mode: DisplayMode }) {
     );
   }
   if (mode === 'collapsible') {
-    // Static panel with a bubble in the top-left corner — matches the
-    // collapsed state the user sees inside the chat-frame.
     return (
       <svg width="32" height="20" viewBox="0 0 32 20" fill="none" stroke="currentColor" strokeWidth="1.6">
         <rect x="1" y="1" width="30" height="18" rx="2" />
@@ -90,7 +90,6 @@ function ModeIcon({ mode }: { mode: DisplayMode }) {
       </svg>
     );
   }
-  // resizable
   return (
     <svg width="32" height="20" viewBox="0 0 32 20" fill="none" stroke="currentColor" strokeWidth="1.6">
       <rect x="1" y="1" width="30" height="18" rx="2" />

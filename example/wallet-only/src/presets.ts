@@ -13,7 +13,7 @@ export const PRESETS: ThemePreset[] = [
   {
     id: 'cherry',
     label: 'Cherry',
-    blurb: 'Default brand — pink/purple gradient, dark surface.',
+    blurb: 'Default brand — pink on near-black.',
     swatches: ['#ff1493', '#4a1d56'],
     /**
      * Every field here matches the iframe's built-in default exactly —
@@ -61,7 +61,8 @@ export const PRESETS: ThemePreset[] = [
       dangerColor: '#ef4444',
       gmColor: '#FFB800',
       roleBadgeColor: '#ff1493',
-      fontFamily: 'Outfit',
+      // Inter is the current web product default; Outfit stays selectable.
+      fontFamily: 'Inter',
       fontSize: 'md',
     },
   },
@@ -114,7 +115,8 @@ export const PRESETS: ThemePreset[] = [
       dangerColor: '#B91C1C',
       gmColor: '#9E4E5C',
       roleBadgeColor: '#9E4E5C',
-      fontFamily: 'Outfit',
+      // Inter is the current web product default; Outfit stays selectable.
+      fontFamily: 'Inter',
       fontSize: 'md',
     },
   },
@@ -183,7 +185,8 @@ export const PRESETS: ThemePreset[] = [
       // Default amber (#FFB800) reads as bright orange on a slate-neutral
       // light surface — looks like a stray warning chip. Slate matches.
       gmColor: '#475569',
-      fontFamily: 'Outfit',
+      // Inter is the current web product default; Outfit stays selectable.
+      fontFamily: 'Inter',
       fontSize: 'md',
     },
   },
@@ -244,7 +247,8 @@ export const PRESETS: ThemePreset[] = [
       // Solid zinc-700 — default would inherit `mentionColor` (#d4d4d8,
       // near-white) and the white chip text would disappear on it.
       roleBadgeColor: '#3f3f46',
-      fontFamily: 'Outfit',
+      // Inter is the current web product default; Outfit stays selectable.
+      fontFamily: 'Inter',
       fontSize: 'md',
     },
   },
