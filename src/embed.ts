@@ -1,5 +1,5 @@
 import { EmbedBridge, base64ToBytes, bytesToBase64 } from './bridge';
-import { createEmbedIframe, getEmbedOrigin } from './iframe';
+import { createEmbedIframe, getEmbedOrigin, applyIframeBackground } from './iframe';
 import type {
   CherryEmbedConfig,
   EmbedEventMap,
@@ -81,6 +81,8 @@ export class CherryEmbed {
       embedUrl: this.config.embedUrl,
       container: this.containerEl,
       position: this.config.position ?? 'inline',
+      // Element-level ground so the host never shows through at document boundaries
+      backgroundColor: this.config.theme?.backgroundColor,
     });
 
     // 2a. If mounted collapsed, hide IMMEDIATELY — before awaiting the
@@ -166,6 +168,10 @@ export class CherryEmbed {
     const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
     (this.config as { theme?: EmbedTheme }).theme = merged;
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
+    // Re-resolve the element-side ground — the setTheme command can't reach it
+    if (this.iframe && 'backgroundColor' in theme) {
+      applyIframeBackground(this.iframe, merged.backgroundColor);
+    }
   }
 
   /**
@@ -181,6 +187,8 @@ export class CherryEmbed {
     // reload doesn't re-apply a theme the user already cleared.
     (this.config as { theme?: EmbedTheme }).theme = undefined;
     this.bridge?.sendCommand('resetTheme', {});
+    // Host-side half of the reset — back to the default dark ground
+    if (this.iframe) applyIframeBackground(this.iframe, undefined);
   }
 
   setLayout(layout: Partial<EmbedLayout>): void {
