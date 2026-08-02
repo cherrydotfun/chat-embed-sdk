@@ -149,6 +149,36 @@ export interface EmbedLayout {
 
 export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
 
+/** Unread counters for one room, as seen by the signed-in viewer. */
+export interface UnreadRoomState {
+  roomId: string;
+  /** Unread messages in the room. */
+  unread: number;
+  /**
+   * Unread "someone addressed you" signals: @-mentions, replies to the
+   * viewer's messages, AND reactions on them — the same signal that drives the
+   * in-chat "@" badge. A bare emoji reaction therefore lights up a host dot
+   * bound to this number.
+   */
+  mentions: number;
+}
+
+/**
+ * Snapshot of the viewer's unread state, delivered by the `unreadState` event
+ * and cached by `getUnreadState()`.
+ */
+export interface UnreadState {
+  /**
+   * Counters for the room this embed renders — never the viewer's other chats.
+   * 0 or 1 entries today: emission is held until the room join resolves, so
+   * this is empty only when there is no roomId to join or the join failed.
+   * The array is future-proof for list mode.
+   */
+  rooms: UnreadRoomState[];
+  /** Sums across `rooms`. */
+  total: { unread: number; mentions: number };
+}
+
 /**
  * Embed display mode.
  *
@@ -201,6 +231,21 @@ export interface CherryEmbedConfig {
 export type EmbedEventMap = {
   ready: void;
   unreadCount: number;
+  /**
+   * Unread + mention counters for the room this embed renders. Emitted once
+   * after the session loads, on every counter change, and on demand via
+   * `refreshUnreadState()`. Never emitted in preview mode — an anonymous
+   * visitor has nothing to catch up on.
+   *
+   * Counters only grow while the widget is hidden (`hide()` / `collapsed`) or
+   * while the user is reading older messages; a visible chat settled at the
+   * tail marks everything read, which is what zeroes `unread` — reopening
+   * behind the frozen "Unread messages" divider defers that until the viewport
+   * reaches the bottom. `mentions` counts @-mentions, replies to the viewer and
+   * reactions on the viewer's messages; it clears on its own boundary (the
+   * in-chat "@" badge), so it outlives the reopen.
+   */
+  unreadState: UnreadState;
   message: { roomId: string; senderId: string; timestamp: number };
   authStateChange: boolean;
   /**

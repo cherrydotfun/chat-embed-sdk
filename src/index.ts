@@ -5,6 +5,8 @@ export type {
   EmbedTheme,
   EmbedLayout,
   EmbedEventMap,
+  UnreadState,
+  UnreadRoomState,
   SignChallengeHandler,
   BridgeMessage,
   BridgeCommand,

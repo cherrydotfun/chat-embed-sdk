@@ -7,6 +7,7 @@ import type {
   EmbedMode,
   EmbedTheme,
   SignChallengeHandler,
+  UnreadState,
 } from './types';
 import { isSignChallengeRequest } from './types';
 
@@ -38,8 +39,10 @@ export class CherryEmbed {
   private readonly listeners = new Map<string, Set<Function>>();
   private _isReady = false;
   private _isAuthenticated = false;
-  private _isVisible = true;
+  private _isVisible: boolean;
   private readonly _mode: EmbedMode;
+  /** Latest `unreadState` payload; `null` until the iframe sends the first one. */
+  private _unreadState: UnreadState | null = null;
 
   /** Current wallet address (may be set before or after mount). */
   private _walletAddress: string | undefined;
@@ -54,11 +57,18 @@ export class CherryEmbed {
     }
     this.config = config;
     this._mode = config.mode ?? 'single';
+    // Visibility is reported to the iframe (it gates auto-mark-read on it), so
+    // it must already be correct at the first handshake, before mount() runs.
+    this._isVisible = !config.collapsed;
     this._walletAddress = config.walletAddress;
     this.signChallengeHandler = config.signChallengeHandler;
   }
 
   async mount(): Promise<void> {
+    // 0. A stacked mount is not just cosmetic: the orphaned bridge keeps its
+    //    listener and re-runs the handshake on every later `ready`.
+    this.teardownInstance();
+
     // 1. Resolve container. Floating widgets may omit it and mount to body.
     if (this.config.container) {
       this.containerEl =
@@ -83,14 +93,11 @@ export class CherryEmbed {
       position: this.config.position ?? 'inline',
     });
 
-    // 2a. If mounted collapsed, hide IMMEDIATELY — before awaiting the
-    //     iframe's `ready` event below. Otherwise the iframe stays fully
-    //     visible for up to 30s while the room loads, which on a floating
-    //     mount looks like a giant chat panel that refuses to close.
-    if (this.config.collapsed) {
+    // 2a. Hide before awaiting `ready` below: otherwise a widget that must start
+    //     hidden stays on screen for up to 30s while reporting visible:false.
+    if (!this._isVisible) {
       this.iframe.style.opacity = '0';
       this.iframe.style.display = 'none';
-      this._isVisible = false;
     }
 
     // 3. Create bridge
@@ -114,7 +121,7 @@ export class CherryEmbed {
 
     // 6. Wait for ready event with timeout. `sendInitConfigs()` will already
     //    have fired via the handler above by the time this resolves.
-    //    (Step 2a above already hid the iframe if `collapsed: true`, so
+    //    (Step 2a above already hid the iframe if it starts hidden, so
     //    no re-hide is needed here.)
     await this.waitForReady(30_000);
   }
@@ -140,17 +147,18 @@ export class CherryEmbed {
     if (this.config.layout) {
       this.bridge.sendCommand('setLayout', this.config.layout as Record<string, unknown>);
     }
+    // The iframe defaults to visible; a widget mounted collapsed (or hidden
+    // before a reload) must say so or it keeps auto-marking messages read.
+    this.bridge.sendCommand('setVisibility', { visible: this._isVisible });
   }
 
   destroy(): void {
-    this.bridge?.destroy();
-    this.iframe?.remove();
-    this.bridge = null;
-    this.iframe = null;
+    this.teardownInstance();
     this.containerEl = null;
     this.listeners.clear();
     this._isReady = false;
     this._isAuthenticated = false;
+    this._unreadState = null;
   }
 
   setRoom(roomId: string): void {
@@ -184,6 +192,10 @@ export class CherryEmbed {
   }
 
   setLayout(layout: Partial<EmbedLayout>): void {
+    // Same reason as setTheme: an iframe reload wipes layout state, and the
+    // `ready` re-init replays `config.layout`, not what the host set last.
+    const merged: EmbedLayout = { ...(this.config.layout ?? {}), ...layout };
+    (this.config as { layout?: EmbedLayout }).layout = merged;
     this.bridge?.sendCommand('setLayout', layout as Record<string, unknown>);
   }
 
@@ -191,6 +203,9 @@ export class CherryEmbed {
     // Keep config in sync so future `ready` events (after iframe reload) re-send
     // the latest token, not the stale one from construction time.
     (this.config as { token?: string }).token = token;
+    // A forced re-exchange can land on a different account, so the cached
+    // counts belong to the previous viewer until the iframe re-emits.
+    this.clearUnreadCache();
     // `force: true` tells the iframe to discard any existing JWT and exchange
     // this embed token again. Without it, the iframe would skip re-exchange
     // because a JWT is already in its sessionStorage — which is exactly the
@@ -211,6 +226,9 @@ export class CherryEmbed {
     // Drop cached token from in-memory config so a future re-mount doesn't
     // automatically re-authenticate from the stale value.
     (this.config as { token?: string }).token = undefined;
+    // The runtime emits nothing for a signed-out viewer, so the cache would
+    // keep serving pre-logout counts forever — refreshUnreadState() included.
+    this.clearUnreadCache();
     this.bridge?.sendCommand('auth.logout', {});
   }
 
@@ -225,6 +243,11 @@ export class CherryEmbed {
    * config to have it sent automatically when the iframe is ready.
    */
   setWalletAddress(address: string): void {
+    // A wallet switch is a viewer switch; the first address of a session is not
+    // (nothing cached yet to drop).
+    if (this._walletAddress !== undefined && this._walletAddress !== address) {
+      this.clearUnreadCache();
+    }
     this._walletAddress = address;
     // Sync config so sendInitConfigs() re-sends on iframe reload
     (this.config as { walletAddress?: string }).walletAddress = address;
@@ -287,6 +310,9 @@ export class CherryEmbed {
       this.iframe.style.transform = 'translateY(0)';
     }
     this._isVisible = true;
+    // Hiding is CSS-only, so the iframe cannot observe it — report it, or the
+    // chat keeps marking incoming messages read behind a closed widget.
+    this.bridge?.sendCommand('setVisibility', { visible: true });
   }
 
   hide(): void {
@@ -301,10 +327,45 @@ export class CherryEmbed {
       }, 200);
     }
     this._isVisible = false;
+    this.bridge?.sendCommand('setVisibility', { visible: false });
   }
 
   toggle(): void {
     this._isVisible ? this.hide() : this.show();
+  }
+
+  /**
+   * Latest unread snapshot pushed by the iframe, or `null` when there is none
+   * to show: before the first `unreadState` event (session still loading, or
+   * not signed in) and after `signOut()`.
+   *
+   * Synchronous read of a cache — subscribe to `unreadState` if you want to
+   * react to changes.
+   */
+  getUnreadState(): UnreadState | null {
+    return this._unreadState;
+  }
+
+  /**
+   * Unread message count from the same cache: across every tracked room, or
+   * for one room when `roomId` is given. Returns `0` when nothing is cached
+   * yet or the room is unknown.
+   */
+  getUnreadCount(roomId?: string): number {
+    const state = this._unreadState;
+    if (!state) return 0;
+    if (roomId === undefined) return state.total.unread;
+    return state.rooms.find((room) => room.roomId === roomId)?.unread ?? 0;
+  }
+
+  /**
+   * Ask the iframe for a fresh `unreadState` event. Fire-and-forget: the
+   * answer arrives through the event stream and updates the cache. Only
+   * needed if you poll instead of subscribing — the iframe already pushes on
+   * every change.
+   */
+  refreshUnreadState(): void {
+    this.bridge?.sendCommand('requestUnreadState', {});
   }
 
   on<K extends keyof EmbedEventMap>(event: K, cb: EventCallback<K>): void {
@@ -339,6 +400,19 @@ export class CherryEmbed {
 
   // ---- Private ----
 
+  /** Drops the DOM + bridge of one mount; shared by destroy() and re-mount. */
+  private teardownInstance(): void {
+    this.bridge?.destroy();
+    this.iframe?.remove();
+    this.bridge = null;
+    this.iframe = null;
+  }
+
+  /** Counters belong to a viewer — a new one starts from a blank cache. */
+  private clearUnreadCache(): void {
+    this._unreadState = null;
+  }
+
   private emit(event: string, data?: unknown): void {
     this.listeners.get(event)?.forEach((cb) => {
       try {
@@ -355,6 +429,7 @@ export class CherryEmbed {
     const events: (keyof EmbedEventMap)[] = [
       'ready',
       'unreadCount',
+      'unreadState',
       'message',
       'authStateChange',
       'tokenExpired',
@@ -368,6 +443,15 @@ export class CherryEmbed {
       this.bridge.onEvent(event, (data: unknown) => {
         if (event === 'authStateChange') {
           this._isAuthenticated = data as boolean;
+        }
+        // Shape-check before caching AND before emitting: listeners are typed
+        // `UnreadState`, so junk from another runtime would throw in host code.
+        if (event === 'unreadState') {
+          if (!isUnreadState(data)) {
+            debugWarn('dropped malformed unreadState payload:', data);
+            return;
+          }
+          this._unreadState = data;
         }
         this.emit(event, data);
       });
@@ -408,4 +492,23 @@ export class CherryEmbed {
       });
     });
   }
+}
+
+/** Non-fatal protocol complaint — never throws into host code. */
+function debugWarn(...args: unknown[]): void {
+  console.warn('[CherryEmbed]', ...args);
+}
+
+/** Structural check for `unreadState` payloads arriving over the bridge. */
+function isUnreadState(data: unknown): data is UnreadState {
+  if (typeof data !== 'object' || data === null) return false;
+  const { rooms, total } = data as { rooms?: unknown; total?: unknown };
+  if (!Array.isArray(rooms) || typeof total !== 'object' || total === null) return false;
+  const { unread, mentions } = total as { unread?: unknown; mentions?: unknown };
+  if (typeof unread !== 'number' || typeof mentions !== 'number') return false;
+  return rooms.every((room: unknown) => {
+    if (typeof room !== 'object' || room === null) return false;
+    const r = room as { roomId?: unknown; unread?: unknown; mentions?: unknown };
+    return typeof r.roomId === 'string' && typeof r.unread === 'number' && typeof r.mentions === 'number';
+  });
 }
