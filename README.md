@@ -64,7 +64,40 @@ const chat = new CherryEmbed({
 await chat.mount();
 ```
 
-Pass `collapsed: true` to start hidden — the widget has no built-in launcher button, so wire your own control to `chat.toggle()` / `chat.show()`.
+Pass `collapsed: true` to start hidden and wire your own control to `chat.toggle()` / `chat.show()` — or let the SDK render the launcher for you with `chatBubble` (below).
+
+### Built-in launcher bubble
+
+`chatBubble: true` adds a round launcher button next to the floating panel: it opens and closes the widget on click, takes its fill from your `theme` (and restyles on every `setTheme()` / `resetTheme()`), and repositions itself whenever visibility changes — including when *you* call `show()` / `hide()` / `toggle()`.
+
+Defaults to **off**, so existing integrations keep rendering their own launcher. It only applies to `floating-right` / `floating-left` and is silently ignored for inline embeds. Its labels are English-only (`Open chat` / `Close chat`) — leave it off if you need localised labels. `destroy()` removes it.
+
+Pair it with `collapsed: true` so the widget starts closed behind the button:
+
+```ts
+const chat = new CherryEmbed({
+  appId: 'YOUR_EMBED_ID',
+  roomId: 'YOUR_ROOM_ID',
+  position: 'floating-right',
+  chatBubble: true,
+  collapsed: true,
+});
+await chat.mount();
+```
+
+If `mount()` rejects (the iframe never reported ready within 30s) the button is left in place — call `chat.destroy()` to tear it down.
+
+The button carries the unread badge for you, in the shape the [unread-indicators docs](https://portal.cherry.fun/docs/embed/unread-indicators) recommend: one Cherry-pink badge in the top-right corner, never two side by side. `chatBubbleBadge` picks how loud it is:
+
+| Value | Unread messages | Mentions |
+| --- | --- | --- |
+| `'dot'` *(default)* | bare 12px dot | one `@` pill, no number |
+| `'count'` | the number | `@ N`, capped at `99+` |
+| `'off'` | nothing | nothing |
+
+In `'count'` mode the number is always the unread-message tally and `@` is a bare mention flag — the mention count itself is never shown, the way Telegram paints the same pair.
+
+It follows the `unreadState` event on its own — no wiring needed — hides itself at zero, and clears whenever the viewer changes: on sign-out, on `signOut()`, and on a `setToken()` / `setWalletAddress()` that switches accounts. The badge is ringed in white so it stays legible over a busy icon; set `--cherry-bubble-badge-ring` to your page background to match a dark page.
 
 ## Authenticating your own users
 

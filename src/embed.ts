@@ -1,10 +1,18 @@
 import { EmbedBridge, base64ToBytes, bytesToBase64 } from './bridge';
-import { createEmbedIframe, getEmbedOrigin } from './iframe';
+import {
+  createBubble,
+  setBubbleBadge,
+  setBubblePose,
+  styleBubbleFill,
+  styleBubbleFont,
+} from './chat-bubble';
+import { createEmbedIframe, getEmbedOrigin, MAX_Z_INDEX } from './iframe';
 import type {
   CherryEmbedConfig,
   EmbedEventMap,
   EmbedLayout,
   EmbedMode,
+  ChatBubbleBadgeMode,
   EmbedTheme,
   SignChallengeHandler,
   UnreadState,
@@ -35,6 +43,8 @@ export class CherryEmbed {
   private readonly config: CherryEmbedConfig;
   private containerEl: HTMLElement | null = null;
   private iframe: HTMLIFrameElement | null = null;
+  private bubble: HTMLButtonElement | null = null;
+  private bubbleClickHandler: (() => void) | null = null;
   private bridge: EmbedBridge | null = null;
   private readonly listeners = new Map<string, Set<Function>>();
   private _isReady = false;
@@ -100,6 +110,13 @@ export class CherryEmbed {
       this.iframe.style.display = 'none';
     }
 
+    // 2b. Built-in launcher (opt-in, floating only). The SDK then owns both
+    //     z-indices: the button on top, the panel one below it.
+    if (this.usesChatBubble()) {
+      this.iframe.style.zIndex = String(MAX_Z_INDEX - 1);
+      this.mountBubble();
+    }
+
     // 3. Create bridge
     const origin = getEmbedOrigin(this.config.embedUrl);
     this.bridge = new EmbedBridge(this.iframe, origin);
@@ -123,6 +140,8 @@ export class CherryEmbed {
     //    have fired via the handler above by the time this resolves.
     //    (Step 2a above already hid the iframe if it starts hidden, so
     //    no re-hide is needed here.)
+    //    A rejection here leaves the `chatBubble` launcher standing — the
+    //    host owns teardown via destroy(); hide() keeps working meanwhile.
     await this.waitForReady(30_000);
   }
 
@@ -154,6 +173,7 @@ export class CherryEmbed {
 
   destroy(): void {
     this.teardownInstance();
+    this.unmountBubble();
     this.containerEl = null;
     this.listeners.clear();
     this._isReady = false;
@@ -173,6 +193,10 @@ export class CherryEmbed {
     // captured at construction time.
     const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
     (this.config as { theme?: EmbedTheme }).theme = merged;
+    if (this.bubble) {
+      styleBubbleFill(this.bubble, merged);
+      styleBubbleFont(this.bubble, merged);
+    }
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
   }
 
@@ -188,6 +212,10 @@ export class CherryEmbed {
     // Mirror the reset on the host-side cache so a subsequent iframe
     // reload doesn't re-apply a theme the user already cleared.
     (this.config as { theme?: EmbedTheme }).theme = undefined;
+    if (this.bubble) {
+      styleBubbleFill(this.bubble, undefined);
+      styleBubbleFont(this.bubble, undefined);
+    }
     this.bridge?.sendCommand('resetTheme', {});
   }
 
@@ -309,7 +337,7 @@ export class CherryEmbed {
       this.iframe.style.opacity = '1';
       this.iframe.style.transform = 'translateY(0)';
     }
-    this._isVisible = true;
+    this.setVisible(true);
     // Hiding is CSS-only, so the iframe cannot observe it — report it, or the
     // chat keeps marking incoming messages read behind a closed widget.
     this.bridge?.sendCommand('setVisibility', { visible: true });
@@ -326,7 +354,7 @@ export class CherryEmbed {
         }
       }, 200);
     }
-    this._isVisible = false;
+    this.setVisible(false);
     this.bridge?.sendCommand('setVisibility', { visible: false });
   }
 
@@ -366,6 +394,14 @@ export class CherryEmbed {
    */
   refreshUnreadState(): void {
     this.bridge?.sendCommand('requestUnreadState', {});
+  }
+
+  /**
+   * @internal — demo/testing hook. Drives the `chatBubble` badge directly,
+   * bypassing the unread cache. No-op without a bubble.
+   */
+  _setBubbleBadge(unread: number, mentions: number): void {
+    if (this.bubble) setBubbleBadge(this.bubble, unread, mentions, this.badgeMode());
   }
 
   on<K extends keyof EmbedEventMap>(event: K, cb: EventCallback<K>): void {
@@ -411,6 +447,63 @@ export class CherryEmbed {
   /** Counters belong to a viewer — a new one starts from a blank cache. */
   private clearUnreadCache(): void {
     this._unreadState = null;
+    // The badge mirrors the cache, so a viewer switch must not leave the
+    // previous viewer's counts on the launcher.
+    this.syncBubbleBadge();
+  }
+
+  /**
+   * The only write-point for `_isVisible`, so the launcher pose can never
+   * drift from reality — whether the bubble, the host, or `mount()` moved it.
+   */
+  private setVisible(visible: boolean): void {
+    this._isVisible = visible;
+    if (this.bubble) setBubblePose(this.bubble, visible);
+  }
+
+  /** The launcher is opt-in and floating-only; inline embeds ignore the flag. */
+  private usesChatBubble(): boolean {
+    return Boolean(this.config.chatBubble) && (this.config.position ?? 'inline') !== 'inline';
+  }
+
+  private mountBubble(): void {
+    // Idempotent: a double mount (StrictMode) must not strand a second button.
+    this.unmountBubble();
+    const bubble = createBubble({
+      position: this.config.position as 'floating-right' | 'floating-left',
+      container: document.body,
+      badge: this.badgeMode(),
+    });
+    const onClick = () => this.toggle();
+    bubble.addEventListener('click', onClick);
+    this.bubble = bubble;
+    this.bubbleClickHandler = onClick;
+    styleBubbleFill(bubble, this.config.theme);
+    styleBubbleFont(bubble, this.config.theme);
+    setBubblePose(bubble, this._isVisible);
+    // Seed from the cache — a remount must not drop counts back to blank.
+    // A signed-out viewer keeps the cache but must not see it resurrected.
+    if (this._isAuthenticated) this.syncBubbleBadge();
+  }
+
+  /** Badge is on by default once the launcher is; `'dot'` shows no numbers. */
+  private badgeMode(): ChatBubbleBadgeMode {
+    return this.config.chatBubbleBadge ?? 'dot';
+  }
+
+  /** Badge mirrors the unread cache; a null cache reads as zeros, which hides it. */
+  private syncBubbleBadge(): void {
+    if (!this.bubble) return;
+    const total = this._unreadState?.total;
+    setBubbleBadge(this.bubble, total?.unread ?? 0, total?.mentions ?? 0, this.badgeMode());
+  }
+
+  private unmountBubble(): void {
+    if (!this.bubble) return;
+    if (this.bubbleClickHandler) this.bubble.removeEventListener('click', this.bubbleClickHandler);
+    this.bubble.remove();
+    this.bubble = null;
+    this.bubbleClickHandler = null;
   }
 
   private emit(event: string, data?: unknown): void {
@@ -443,6 +536,9 @@ export class CherryEmbed {
       this.bridge.onEvent(event, (data: unknown) => {
         if (event === 'authStateChange') {
           this._isAuthenticated = data as boolean;
+          // Nothing is emitted for a signed-out viewer, so the badge would
+          // otherwise freeze on the previous session's counts.
+          if (!data && this.bubble) setBubbleBadge(this.bubble, 0, 0, this.badgeMode());
         }
         // Shape-check before caching AND before emitting: listeners are typed
         // `UnreadState`, so junk from another runtime would throw in host code.
@@ -452,6 +548,7 @@ export class CherryEmbed {
             return;
           }
           this._unreadState = data;
+          this.syncBubbleBadge();
         }
         this.emit(event, data);
       });

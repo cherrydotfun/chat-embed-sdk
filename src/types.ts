@@ -197,6 +197,17 @@ export interface UnreadState {
  */
 export type EmbedMode = 'single' | 'external-controlled' | 'list';
 
+/**
+ * How the `chatBubble` launcher renders unread state.
+ *
+ * - `'dot'` (default) — a bare pink dot while messages are unread, upgraded to
+ *   a single `@` pill once something addressed the viewer. No numbers.
+ * - `'count'` — a counter pill: the unread number, `@ N` while mentions are
+ *   outstanding, capped at `99+`.
+ * - `'off'` — no badge at all.
+ */
+export type ChatBubbleBadgeMode = 'dot' | 'count' | 'off';
+
 export interface CherryEmbedConfig {
   appId: string;
   /**
@@ -220,6 +231,32 @@ export interface CherryEmbedConfig {
   layout?: EmbedLayout;
   position?: 'inline' | 'floating-right' | 'floating-left';
   collapsed?: boolean;
+  /**
+   * Render the SDK's own floating launcher button beside the widget.
+   * Defaults to `false` — the host then renders its own launcher and drives
+   * `show()` / `hide()` / `toggle()` itself.
+   *
+   * Only meaningful with `position: 'floating-right' | 'floating-left'`;
+   * silently ignored for inline embeds. Pair with `collapsed: true` (the
+   * recommended combo) so the widget starts closed behind the launcher.
+   *
+   * While enabled the SDK owns the stacking order: the button sits on top and
+   * the panel drops one z-index below it. Labels are English-only (the SDK has
+   * no i18n) — hosts needing localised labels should leave this off. Removed by
+   * `destroy()`; a `mount()` that rejects on the ready timeout leaves the button
+   * in place for the host to tear down.
+   */
+  chatBubble?: boolean;
+  /**
+   * How the `chatBubble` launcher shows unread state. Defaults to `'dot'` —
+   * the badge is on as soon as `chatBubble` is, showing a bare dot for unread
+   * messages and a single `@` pill for mentions. Use `'count'` for numbers
+   * (`N`, `@ N`, capped at `99+`) or `'off'` for no badge.
+   *
+   * Ignored without `chatBubble`. The badge follows the `unreadState` event on
+   * its own and clears on any viewer change; nothing to wire up.
+   */
+  chatBubbleBadge?: ChatBubbleBadgeMode;
   embedUrl?: string;
   /**
    * Optional wallet signing callback registered during mount before initial

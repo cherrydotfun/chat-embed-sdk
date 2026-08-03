@@ -1,5 +1,13 @@
 const DEFAULT_EMBED_URL = 'https://embed.cherry.fun';
 
+/** Gutter between the floating card and the viewport edges. */
+export const FLOATING_GUTTER_PX = 20;
+/** Floating card size. The `chatBubble` launcher derives its open pose from the height. */
+const FLOATING_WIDTH_PX = 380;
+export const FLOATING_HEIGHT_PX = 520;
+/** Top of the stacking order. The launcher takes it and demotes the card by one. */
+export const MAX_Z_INDEX = 2147483647;
+
 export function createEmbedIframe(config: {
   appId: string;
   roomId?: string;
@@ -45,19 +53,19 @@ export function applyFloatingStyles(
   position: 'floating-right' | 'floating-left',
 ): void {
   iframe.style.position = 'fixed';
-  iframe.style.bottom = '20px';
-  iframe.style[position === 'floating-right' ? 'right' : 'left'] = '20px';
-  iframe.style.width = '380px';
-  iframe.style.height = '520px';
+  iframe.style.bottom = `${FLOATING_GUTTER_PX}px`;
+  iframe.style[position === 'floating-right' ? 'right' : 'left'] = `${FLOATING_GUTTER_PX}px`;
+  iframe.style.width = `${FLOATING_WIDTH_PX}px`;
+  iframe.style.height = `${FLOATING_HEIGHT_PX}px`;
   // Cap to viewport so the widget never extends past the screen edges
   // on short viewports (e.g. mobile portrait, embedded panes). The 40px
   // budget keeps the 20px anchor on the bottom-right + 20px breathing
   // room on the opposite side.
-  iframe.style.maxWidth = 'calc(100vw - 40px)';
-  iframe.style.maxHeight = 'calc(100vh - 40px)';
+  iframe.style.maxWidth = `calc(100vw - ${FLOATING_GUTTER_PX * 2}px)`;
+  iframe.style.maxHeight = `calc(100vh - ${FLOATING_GUTTER_PX * 2}px)`;
   iframe.style.borderRadius = '16px';
   iframe.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
-  iframe.style.zIndex = '2147483647'; // Max z-index
+  iframe.style.zIndex = String(MAX_Z_INDEX);
   iframe.style.transition = 'opacity 0.2s, transform 0.2s';
 }
 
