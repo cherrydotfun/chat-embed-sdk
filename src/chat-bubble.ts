@@ -92,8 +92,18 @@ function measureDigitAscent(font: string): number {
  * above the digits it is supposed to sit level with.
  */
 const DIGIT_HEIGHT_RATIO = 0.7;
-/** Cherry pink, the pink the chat itself uses. */
+/**
+ * Cherry pink, the badge fill out of the box. No config key recolours it — the
+ * embed's own engine reports the resolved mention colours via `themeApplied`.
+ */
 const BADGE_PINK = '#ff1493';
+
+/** Contrast ink over a fill; white when the fill is not a plain hex to read. */
+function contrastInk(fill: string): string {
+  const luminance = hexLuminance(fill);
+  if (luminance === null) return '#ffffff';
+  return luminance > 0.5 ? '#111111' : '#ffffff';
+}
 /**
  * Ring in the page background. The SDK cannot know the host's backdrop, so it
  * reads `--cherry-bubble-badge-ring` and falls back to the docs' white.
@@ -273,7 +283,7 @@ function createBadge(): HTMLElement {
   badge.setAttribute(BADGE_ASCENT_SLOT, String(measureDigitAscent(badgeFont())));
   if (prefersReducedMotion()) badge.setAttribute(BADGE_STATIC_SLOT, '');
   else badge.style.transition = BADGE_TRANSITION;
-  badge.style.background = BADGE_PINK;
+  badge.style.background = BADGE_PINK; // repainted from theme by styleBubbleBadge
   badge.style.color = '#fff';
   badge.style.font = badgeFont();
   badge.style.boxShadow = `0 0 0 2px ${BADGE_RING}`;
@@ -445,7 +455,24 @@ export function styleBubbleFont(bubble: HTMLButtonElement, theme?: EmbedTheme): 
 }
 
 /** Re-derive fill + icon ink. Called at mount and on every setTheme / resetTheme. */
-export function styleBubbleFill(bubble: HTMLButtonElement, theme?: EmbedTheme): void {
-  bubble.style.background = bubbleFill(theme);
-  bubble.style.color = bubbleInk(theme);
+export function styleBubbleFill(
+  bubble: HTMLButtonElement,
+  theme?: EmbedTheme,
+  bg?: string,
+  ink?: string,
+): void {
+  bubble.style.background = bg || bubbleFill(theme);
+  bubble.style.color = ink || bubbleInk(theme);
+}
+
+/**
+ * Badge fill + ink, both engine-resolved or both defaulted. Fields are
+ * independent: an engine fill with no ink still gets a legible one derived from
+ * that fill, while the bare default keeps the pink's white.
+ */
+export function styleBubbleBadge(bubble: HTMLButtonElement, bg?: string, ink?: string): void {
+  const badge = bubble.querySelector<HTMLElement>(`[${BADGE_SLOT}]`);
+  if (!badge) return;
+  badge.style.background = bg || BADGE_PINK;
+  badge.style.color = ink || (bg ? contrastInk(bg) : '#ffffff');
 }

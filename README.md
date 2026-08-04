@@ -87,7 +87,7 @@ await chat.mount();
 
 If `mount()` rejects (the iframe never reported ready within 30s) the button is left in place — call `chat.destroy()` to tear it down.
 
-The button carries the unread badge for you, in the shape the [unread-indicators docs](https://portal.cherry.fun/docs/embed/unread-indicators) recommend: one Cherry-pink badge in the top-right corner, never two side by side. `chatBubbleBadge` picks how loud it is:
+The button carries the unread badge for you, in the shape the [unread-indicators docs](https://portal.cherry.fun/docs/embed/unread-indicators) recommend: one badge in the top-right corner, never two side by side. It is Cherry pink (`#ff1493`) out of the box and adopts the embed engine's resolved mention colours once the iframe reports them — no config key recolours it directly. `chatBubbleBadge` picks how loud it is:
 
 | Value | Unread messages | Mentions |
 | --- | --- | --- |

@@ -3,6 +3,7 @@ import {
   createBubble,
   setBubbleBadge,
   setBubblePose,
+  styleBubbleBadge,
   styleBubbleFill,
   styleBubbleFont,
 } from './chat-bubble';
@@ -44,6 +45,19 @@ export class CherryEmbed {
   private containerEl: HTMLElement | null = null;
   private iframe: HTMLIFrameElement | null = null;
   private bubble: HTMLButtonElement | null = null;
+  /**
+   * @internal
+   * Colours the embed's own theme engine resolved, from `themeApplied`. Kept
+   * INTERNAL — this is not a public event. Freshest values win over the
+   * config-derived fallbacks; every field is optional, so an old embed that
+   * sends none (or only some) simply leaves those on the fallback.
+   */
+  private _resolved: {
+    ownBubbleBg?: string;
+    ownBubbleInk?: string;
+    mentionBg?: string;
+    mentionInk?: string;
+  } | null = null;
   private bubbleClickHandler: (() => void) | null = null;
   private bridge: EmbedBridge | null = null;
   private readonly listeners = new Map<string, Set<Function>>();
@@ -92,6 +106,9 @@ export class CherryEmbed {
       }
       this.containerEl = document.body;
     }
+
+    // A remount starts from the fallbacks; the iframe re-reports on ready.
+    this._resolved = null;
 
     // 2. Create iframe
     this.iframe = createEmbedIframe({
@@ -179,6 +196,7 @@ export class CherryEmbed {
     this._isReady = false;
     this._isAuthenticated = false;
     this._unreadState = null;
+    this._resolved = null;
   }
 
   setRoom(roomId: string): void {
@@ -193,8 +211,11 @@ export class CherryEmbed {
     // captured at construction time.
     const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
     (this.config as { theme?: EmbedTheme }).theme = merged;
+    // The engine's old resolution is stale the moment the theme changes: paint
+    // the fallback now, let the next `themeApplied` land the engine's answer.
+    this._resolved = null;
     if (this.bubble) {
-      styleBubbleFill(this.bubble, merged);
+      this.paintBubble();
       styleBubbleFont(this.bubble, merged);
     }
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
@@ -212,8 +233,9 @@ export class CherryEmbed {
     // Mirror the reset on the host-side cache so a subsequent iframe
     // reload doesn't re-apply a theme the user already cleared.
     (this.config as { theme?: EmbedTheme }).theme = undefined;
+    this._resolved = null;
     if (this.bubble) {
-      styleBubbleFill(this.bubble, undefined);
+      this.paintBubble();
       styleBubbleFont(this.bubble, undefined);
     }
     this.bridge?.sendCommand('resetTheme', {});
@@ -478,12 +500,43 @@ export class CherryEmbed {
     bubble.addEventListener('click', onClick);
     this.bubble = bubble;
     this.bubbleClickHandler = onClick;
-    styleBubbleFill(bubble, this.config.theme);
+    this.paintBubble();
     styleBubbleFont(bubble, this.config.theme);
     setBubblePose(bubble, this._isVisible);
     // Seed from the cache — a remount must not drop counts back to blank.
     // A signed-out viewer keeps the cache but must not see it resurrected.
     if (this._isAuthenticated) this.syncBubbleBadge();
+  }
+
+  /** Repaint bubble + badge: engine-resolved colours first, theme fallback behind. */
+  private paintBubble(): void {
+    if (!this.bubble) return;
+    const theme = this.config.theme;
+    styleBubbleFill(this.bubble, theme, this._resolved?.ownBubbleBg, this._resolved?.ownBubbleInk);
+    styleBubbleBadge(this.bubble, this._resolved?.mentionBg, this._resolved?.mentionInk);
+  }
+
+  /**
+   * @internal
+   * `themeApplied` carries what the embed's engine actually resolved. Consumed
+   * internally so the launcher matches the chat it opens; the event stays off
+   * the public `EmbedEventMap`.
+   */
+  private applyResolvedTheme(data: unknown): void {
+    const payload = (data ?? {}) as { resolved?: unknown };
+    const resolved = payload.resolved;
+    if (!resolved || typeof resolved !== 'object') return;
+    const field = (key: string): string | undefined => {
+      const value = (resolved as Record<string, unknown>)[key];
+      return typeof value === 'string' && value.trim() ? value : undefined;
+    };
+    this._resolved = {
+      ownBubbleBg: field('ownBubbleBg'),
+      ownBubbleInk: field('ownBubbleInk'),
+      mentionBg: field('mentionBg'),
+      mentionInk: field('mentionInk'),
+    };
+    this.paintBubble();
   }
 
   /** Badge is on by default once the launcher is; `'dot'` shows no numbers. */
@@ -531,6 +584,10 @@ export class CherryEmbed {
       'preview',
       'roomChanged',
     ];
+
+    // Internal only — deliberately not in `events` above, so it never becomes
+    // part of the public event surface.
+    this.bridge.onEvent('themeApplied', (data: unknown) => this.applyResolvedTheme(data));
 
     for (const event of events) {
       this.bridge.onEvent(event, (data: unknown) => {

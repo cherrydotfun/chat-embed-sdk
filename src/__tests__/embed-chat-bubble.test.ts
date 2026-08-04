@@ -1374,3 +1374,144 @@ describe('chatBubble — badge font follows the theme', () => {
     chat.destroy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Badge colour: Cherry pink out of the box; only the engine recolours it.
+// ---------------------------------------------------------------------------
+
+describe('chatBubble — badge colour', () => {
+  const bg = () => badge().style.background;
+  const ink = () => badge().style.color;
+
+  it('defaults to Cherry pink with white ink', async () => {
+    const chat = await mountEmbed({ appId: 'v1', position: 'floating-right', chatBubble: true });
+    expect(bg()).toBe('rgb(255, 20, 147)'); // #ff1493
+    expect(ink()).toBe('rgb(255, 255, 255)');
+    chat.destroy();
+  });
+
+  it('ignores theme keys entirely — no config value recolours it', async () => {
+    const chat = await mountEmbed({
+      appId: 'v2',
+      position: 'floating-right',
+      chatBubble: true,
+      // mentionColor is a deprecated linkColor alias; the badge must not read it.
+      theme: { mentionColor: '#2200aa', primaryColor: '#00ff00', ownBubbleColor: '#123456' },
+    });
+    expect(bg()).toBe('rgb(255, 20, 147)');
+    expect(ink()).toBe('rgb(255, 255, 255)');
+    chat.destroy();
+  });
+
+  it('stays pink across setTheme and resetTheme', async () => {
+    const chat = await mountEmbed({ appId: 'v3', position: 'floating-right', chatBubble: true });
+    chat.setTheme({ mentionColor: '#ffffff' });
+    expect(bg()).toBe('rgb(255, 20, 147)');
+    chat.resetTheme();
+    expect(bg()).toBe('rgb(255, 20, 147)');
+    expect(ink()).toBe('rgb(255, 255, 255)');
+    chat.destroy();
+  });
+
+  it('derives ink from an engine fill that arrives without one', async () => {
+    const chat = await mountEmbed({ appId: 'v4', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', { resolved: { mentionBg: '#fff3b0' } }); // light
+    expect(bg()).toBe('rgb(255, 243, 176)');
+    expect(ink()).toBe('rgb(17, 17, 17)'); // luminance over the resolved fill
+    dispatchEmbedEvent('themeApplied', { resolved: { mentionBg: '#101020' } }); // dark
+    expect(ink()).toBe('rgb(255, 255, 255)');
+    chat.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Layer 2 — engine-resolved colours via the internal `themeApplied` event.
+// ---------------------------------------------------------------------------
+
+describe('chatBubble — engine-resolved colours', () => {
+  const RESOLVED = {
+    ownBubbleBg: 'rgb(10, 20, 30)',
+    ownBubbleInk: 'rgb(200, 210, 220)',
+    mentionBg: 'rgb(40, 50, 60)',
+    mentionInk: 'rgb(230, 231, 232)',
+  };
+  const bubbleBg = () => bubble().style.background;
+  const bubbleInk = () => bubble().style.color;
+  const badgeBg = () => badge().style.background;
+  const badgeInk = () => badge().style.color;
+
+  it('repaints bubble and badge from a full payload', async () => {
+    const chat = await mountEmbed({ appId: 'w1', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', { resolved: RESOLVED });
+    expect(bubbleBg()).toBe(RESOLVED.ownBubbleBg);
+    expect(bubbleInk()).toBe(RESOLVED.ownBubbleInk);
+    expect(badgeBg()).toBe(RESOLVED.mentionBg);
+    expect(badgeInk()).toBe(RESOLVED.mentionInk);
+    chat.destroy();
+  });
+
+  it('falls back per field on a partial payload', async () => {
+    const chat = await mountEmbed({ appId: 'w2', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', { resolved: { mentionBg: 'rgb(1, 2, 3)' } });
+    expect(badgeBg()).toBe('rgb(1, 2, 3)');
+    expect(badgeInk()).toBe('rgb(255, 255, 255)'); // non-hex fill is unreadable -> white
+    expect(bubbleBg()).toBe('rgb(255, 91, 168)'); // brand fallback still painting
+    chat.destroy();
+  });
+
+  it('ignores a payload with no resolved block (old embeds)', async () => {
+    const chat = await mountEmbed({ appId: 'w3', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', {});
+    dispatchEmbedEvent('themeApplied', { resolved: null });
+    expect(badgeBg()).toBe('rgb(255, 20, 147)');
+    expect(bubbleBg()).toBe('rgb(255, 91, 168)');
+    chat.destroy();
+  });
+
+  it('lets a later setTheme paint the fallback until the engine answers again', async () => {
+    const chat = await mountEmbed({ appId: 'w4', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', { resolved: RESOLVED });
+    expect(badgeBg()).toBe(RESOLVED.mentionBg);
+
+    chat.setTheme({ primaryColor: '#2200aa' }); // stale resolution dropped
+    expect(badgeBg()).toBe('rgb(255, 20, 147)'); // back to the pink default
+
+    dispatchEmbedEvent('themeApplied', { resolved: { mentionBg: 'rgb(9, 9, 9)' } });
+    expect(badgeBg()).toBe('rgb(9, 9, 9)'); // engine wins again
+    chat.destroy();
+  });
+
+  it('resetTheme drops the resolved colours too', async () => {
+    const chat = await mountEmbed({ appId: 'w5', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', { resolved: RESOLVED });
+    chat.resetTheme();
+    expect(badgeBg()).toBe('rgb(255, 20, 147)');
+    expect(bubbleBg()).toBe('rgb(255, 91, 168)');
+    chat.destroy();
+  });
+
+  it('clears the resolved cache on destroy, so a remount starts from fallbacks', async () => {
+    const chat = await mountEmbed({ appId: 'w6', position: 'floating-right', chatBubble: true });
+    dispatchEmbedEvent('themeApplied', { resolved: RESOLVED });
+    expect(badgeBg()).toBe(RESOLVED.mentionBg);
+    chat.destroy();
+    expect(
+      (chat as unknown as { _resolved: unknown })._resolved,
+    ).toBeNull();
+
+    const again = await mountEmbed({ appId: 'w6b', position: 'floating-right', chatBubble: true });
+    expect(badgeBg()).toBe('rgb(255, 20, 147)');
+    again.destroy();
+  });
+
+  it('keeps themeApplied off the public event surface', async () => {
+    const chat = await mountEmbed({ appId: 'w7', position: 'floating-right', chatBubble: true });
+    const spy = vi.fn();
+    // Not in EmbedEventMap — a cast is the only way to even attempt it.
+    (chat as unknown as { on: (e: string, cb: () => void) => void }).on('themeApplied', spy);
+    dispatchEmbedEvent('themeApplied', { resolved: RESOLVED });
+    expect(spy).not.toHaveBeenCalled(); // consumed internally, never forwarded
+    expect(badgeBg()).toBe(RESOLVED.mentionBg); // but it did take effect
+    chat.destroy();
+  });
+});
