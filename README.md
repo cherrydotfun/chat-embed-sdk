@@ -84,6 +84,56 @@ const chat = new CherryEmbed({
 await chat.mount();
 ```
 
+## Showing your own users
+
+By default the chat labels people by their wallet identity — a `.sol` domain, or
+a shortened address. If your app has its own usernames and avatars, it can supply
+them, and the widget will render your users instead.
+
+Enable **"Who your users appear as"** for the embed at
+[portal.cherry.fun](https://portal.cherry.fun) first — without that switch the
+widget never asks. Then either answer from the page:
+
+```ts
+const chat = new CherryEmbed({
+  appId: 'YOUR_EMBED_ID',
+  container: '#cherry-chat',
+  roomId: 'YOUR_ROOM_ID',
+
+  // Called with up to 50 wallets at a time. Return `null` (or omit a wallet)
+  // for anyone you don't know — that one keeps its Cherry identity.
+  resolveUsers: async (wallets) => {
+    const rows = await myApi.usersByWallet(wallets);
+    return Object.fromEntries(
+      wallets.map((w) => [w, rows[w] ? { displayName: rows[w].name, avatarUrl: rows[w].photo } : null]),
+    );
+  },
+
+  // Optional: makes @mention autocomplete search YOUR directory.
+  searchUsers: async ({ query, cursor, limit }) => {
+    const page = await myApi.searchUsers({ query, cursor, limit });
+    return { users: page.items, nextCursor: page.next };
+  },
+});
+```
+
+…or set a **profile endpoint** in the portal and let the widget call your backend
+directly (`POST {url}/resolve`, `GET {url}/search`) — the better fit for mobile
+WebViews, where the host page is a thin shim. Your endpoint needs CORS for
+`https://embed.cherry.fun`; pass a bearer token with
+`chat.setIdentityToken(token)` if it requires auth.
+
+Push changes as they happen — an open chat won't notice a rename otherwise:
+
+```ts
+chat.setUserProfiles({ [wallet]: { displayName: 'New name', avatarUrl } });
+chat.invalidateUserProfiles([wallet]);   // or invalidateUserProfiles() for all
+```
+
+This is a **visual overlay, scoped to one running chat**. Cherry stores none of
+these names, the wallet remains the author of every message, and nothing here
+changes how the person appears in the Cherry app itself.
+
 ## Documentation
 
 The portal docs are the source of truth for the SDK surface:
