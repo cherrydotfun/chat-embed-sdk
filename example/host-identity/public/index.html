@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cherry Embed — host identity bench</title>
+  <script src="/cherry-embed.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0d11;
+      --surface:     #16161e;
+      --surface2:    #1e1e28;
+      --border:      #2a2a38;
+      --primary:     #b054f7;
+      --accent:      #f54b7c;
+      --text:        #e8e8f0;
+      --text-muted:  #6b6b80;
+      --green:       #3dd68c;
+      --yellow:      #f5c842;
+      --red:         #f5504b;
+      --mono:        'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    .header {
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .header-logo {
+      font-size: 18px; font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header-badge {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      background: rgba(176, 84, 247, 0.15); color: var(--primary);
+      border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .header-note { color: var(--text-muted); font-size: 12px; }
+
+    .main {
+      flex: 1; display: grid; gap: 20px; padding: 20px 24px;
+      grid-template-columns: minmax(0, 1fr) 420px;
+      align-items: start;
+    }
+    @media (max-width: 1000px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    .card + .card { margin-top: 16px; }
+    .card-head {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .card-title { font-weight: 600; font-size: 13px; }
+    .card-body { padding: 16px; }
+    .card-body > * + * { margin-top: 12px; }
+
+    p.hint { color: var(--text-muted); font-size: 12px; }
+
+    button {
+      font: inherit; font-size: 13px; padding: 7px 12px; cursor: pointer;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    button:hover:not(:disabled) { border-color: var(--primary); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    button.danger { border-color: var(--red); color: var(--red); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    input[type="text"] {
+      font: inherit; font-size: 13px; padding: 7px 10px; width: 100%;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+    .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+    .status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+    .dot.on { background: var(--green); }
+    .dot.off { background: var(--red); }
+
+    #chat { height: 620px; border-radius: 12px; overflow: hidden; }
+
+    .log {
+      font-family: var(--mono); font-size: 11px; line-height: 1.7;
+      max-height: 260px; overflow: auto; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-word; }
+    .log-line + .log-line { border-top: 1px solid rgba(255,255,255,0.04); padding-top: 4px; margin-top: 4px; }
+    .log-op { color: var(--primary); }
+    .log-ok { color: var(--green); }
+    .log-warn { color: var(--yellow); }
+
+    .roster { max-height: 220px; overflow: auto; }
+    .roster-row {
+      display: flex; align-items: center; gap: 10px; padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .roster-row img { width: 28px; height: 28px; border-radius: 50%; }
+    .roster-name { font-size: 13px; }
+    .roster-wallet { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <span class="header-logo">Cherry</span>
+    <span class="header-badge">host identity bench</span>
+    <span class="header-note">
+      Every participant should render under this page's names and avatars — not a
+      <code>.sol</code> domain or a shortened wallet.
+    </span>
+  </header>
+
+  <main class="main">
+    <div>
+      <div id="chat"></div>
+    </div>
+
+    <div>
+      <!-- ── Status ─────────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">Status</span></div>
+        <div class="card-body">
+          <div class="status"><span id="dot-mount" class="dot"></span><span id="txt-mount">mounting…</span></div>
+          <div class="status"><span id="dot-bridge" class="dot"></span><span id="txt-bridge">bridge handlers: on</span></div>
+          <div class="status"><span id="dot-http" class="dot"></span><span id="txt-http">http endpoint: not called yet</span></div>
+          <p class="hint">
+            If nothing is relabelled, the switch is off: portal.cherry.fun → your embed →
+            <strong>General</strong> → "Who your users appear as". The iframe never asks otherwise.
+          </p>
+          <p class="hint">
+            Profile endpoint for the HTTP transport (paste it into that same card to test it):
+            <code id="resolver-url">…</code>
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Live changes ───────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">Push a change</span></div>
+        <div class="card-body">
+          <div>
+            <label for="rename-wallet">Wallet</label>
+            <input id="rename-wallet" type="text" placeholder="paste a wallet from the chat" />
+          </div>
+          <div>
+            <label for="rename-name">New display name</label>
+            <input id="rename-name" type="text" value="Renamed Live ✨" />
+          </div>
+          <div class="row">
+            <button id="btn-rename" class="primary">setUserProfiles()</button>
+            <button id="btn-forget">invalidate(wallet)</button>
+            <button id="btn-forget-all" class="danger">invalidate all</button>
+          </div>
+          <p class="hint">
+            A rename is invisible to an open chat without this: the iframe only asks about
+            wallets it hasn't resolved yet.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Sanitizer probe ────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">Hostile profiles</span></div>
+        <div class="card-body">
+          <p class="hint">
+            Answers the next resolves with names carrying newlines, zero-width padding, bidi
+            overrides, 400 characters, and a <code>javascript:</code> avatar. The chat must render
+            them flattened, trimmed and pictureless — never as a second row, a lookalike of
+            someone else, or a script URL.
+          </p>
+          <div class="row">
+            <button id="btn-hostile">Serve hostile profiles</button>
+            <button id="btn-normal">Back to normal</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Directory ──────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-title">Your app's directory</span>
+          <span class="header-note">searchUsers() corpus</span>
+        </div>
+        <div class="card-body">
+          <p class="hint">
+            Type <code>@</code> plus any name below in the composer — mention autocomplete searches
+            this list, not just the room's history.
+          </p>
+          <div id="roster" class="roster"></div>
+        </div>
+      </section>
+
+      <!-- ── Call log ───────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-title">What the iframe asked for</span>
+          <button id="btn-clear-log">clear</button>
+        </div>
+        <div class="card-body">
+          <div id="log" class="log"><div class="log-line">waiting…</div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Bench state
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Wallets the chat has asked about, so the rename field can be prefilled. */
+const seenWallets = new Set();
+/** Flipped by the "Hostile profiles" button — see buildProfile(). */
+let hostileMode = false;
+/** When false, resolveUsers/searchUsers are not registered (METHOD_NOT_FOUND). */
+let bridgeEnabled = true;
+
+let config = null;
+let chat = null;
+
+const logEl = document.getElementById('log');
+function log(op, detail, cls) {
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const time = new Date().toLocaleTimeString();
+  line.innerHTML =
+    `<span class="log-op">${op}</span> ` +
+    `<span class="${cls || ''}">${detail}</span> ` +
+    `<span style="color:var(--text-muted)">${time}</span>`;
+  if (logEl.firstChild && logEl.firstChild.textContent === 'waiting…') logEl.innerHTML = '';
+  logEl.insertBefore(line, logEl.firstChild);
+  while (logEl.childNodes.length > 60) logEl.removeChild(logEl.lastChild);
+}
+
+function setStatus(id, state, text) {
+  document.getElementById('dot-' + id).className = 'dot ' + state;
+  document.getElementById('txt-' + id).textContent = text;
+}
+
+const short = (w) => (w.length > 12 ? `${w.slice(0, 4)}…${w.slice(-4)}` : w);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The two handlers under test
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The profile this "app" holds for a wallet.
+ *
+ * Normally it comes from the server's directory. In hostile mode it returns
+ * deliberately dangerous values, to prove the embed sanitizes what it renders.
+ */
+function buildProfile(wallet, row) {
+  if (!hostileMode) return { displayName: row.displayName, avatarUrl: row.avatarUrl };
+  return {
+    displayName:
+      '\u202E' +                        // right-to-left override
+      'admin\nmoderator' +              // fake second line
+      '\u200B\u200B\u200B' +            // zero-width padding (lookalike minting)
+      '\t tail ' +
+      'x'.repeat(400),                  // way past the length cap
+    avatarUrl: 'javascript:alert(1)',   // must never reach an <img>
+    isAdmin: true,                      // unknown field, must be dropped
+  };
+}
+
+/** POST to our own backend — the same directory the HTTP transport serves. */
+async function fetchProfiles(wallets) {
+  const res = await fetch('/identity/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: wallets }),
+  });
+  if (!res.ok) throw new Error(`directory responded ${res.status}`);
+  const { users } = await res.json();
+  return users || {};
+}
+
+async function resolveUsers(wallets) {
+  wallets.forEach((w) => seenWallets.add(w));
+  prefillRenameField();
+  log('users.resolve', `${wallets.length} wallet(s): ${wallets.map(short).join(', ')}`);
+  const rows = await fetchProfiles(wallets);
+  const out = {};
+  for (const wallet of wallets) {
+    const row = rows[wallet];
+    // A real app returns null for wallets it doesn't know; the chat then keeps
+    // the Cherry identity for that person instead of asking again.
+    out[wallet] = row ? buildProfile(wallet, row) : null;
+  }
+  log('→ answered', Object.values(out).filter(Boolean).length + ' profile(s)', 'log-ok');
+  return out;
+}
+
+async function searchUsers({ query, cursor, limit }) {
+  log('users.search', `query="${query || ''}" limit=${limit}`);
+  const params = new URLSearchParams({ query: query || '', limit: String(limit || 10) });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`/identity/search?${params}`);
+  if (!res.ok) throw new Error(`directory responded ${res.status}`);
+  const page = await res.json();
+  log('→ answered', `${page.users.length} match(es)`, 'log-ok');
+  return page;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mount
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function main() {
+  config = await fetch('/api/config').then((r) => r.json());
+  document.getElementById('resolver-url').textContent = config.resolverUrl;
+  renderRoster(config.directory);
+
+  if (!config.appId || !config.roomId) {
+    setStatus('mount', 'off', 'APP_ID / ROOM_ID missing — fill in example/.env');
+    return;
+  }
+
+  chat = new CherryEmbedSDK.CherryEmbed({
+    appId: config.appId,
+    roomId: config.roomId,
+    container: '#chat',
+    embedUrl: config.embedUrl,
+    theme: { mode: 'dark', primaryColor: '#b054f7' },
+
+    // ── The feature under test ────────────────────────────────────────────
+    // Registered only while `bridgeEnabled`. Leaving them out is a supported
+    // configuration: the SDK then answers METHOD_NOT_FOUND and the iframe
+    // falls back to the HTTP endpoint (or to Cherry identities).
+    ...(bridgeEnabled ? { resolveUsers, searchUsers } : {}),
+
+    // Wallet-only embeds sign in from inside the iframe; nothing to do here.
+    signChallengeHandler: async (message) => {
+      const provider = window.phantom?.solana || window.solana;
+      if (!provider) throw new Error('no wallet extension');
+      const { signature } = await provider.signMessage(message, 'utf8');
+      return signature;
+    },
+  });
+
+  chat.on('authStateChange', (authed) =>
+    log('event', `authStateChange: ${authed}`, authed ? 'log-ok' : 'log-warn'),
+  );
+  chat.on('preview', (p) => log('event', `preview visible=${p.visible} gated=${p.gated}`));
+
+  await chat.mount();
+  setStatus('mount', 'on', 'iframe mounted');
+  setStatus('bridge', bridgeEnabled ? 'on' : 'off', `bridge handlers: ${bridgeEnabled ? 'on' : 'off'}`);
+  log('mount', 'iframe ready', 'log-ok');
+
+  pollHttpLog();
+}
+
+/** Surfaces hits on the HTTP transport — proof of WHICH transport answered. */
+async function pollHttpLog() {
+  let lastSeen = 0;
+  setInterval(async () => {
+    try {
+      const { entries } = await fetch('/api/identity-log').then((r) => r.json());
+      const fresh = entries.slice(lastSeen);
+      lastSeen = entries.length;
+      for (const e of fresh) {
+        setStatus('http', 'on', 'http endpoint: answering');
+        log('http ' + e.op, JSON.stringify({ ...e, at: undefined }), 'log-ok');
+      }
+    } catch { /* server restarted; keep polling */ }
+  }, 2000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────────
+
+function prefillRenameField() {
+  const input = document.getElementById('rename-wallet');
+  if (!input.value && seenWallets.size) input.value = [...seenWallets][0];
+}
+
+function renderRoster(rows) {
+  const el = document.getElementById('roster');
+  el.innerHTML = '';
+  for (const row of rows) {
+    const div = document.createElement('div');
+    div.className = 'roster-row';
+    div.innerHTML =
+      `<img src="${row.avatarUrl}" alt="" />` +
+      `<div><div class="roster-name">${row.displayName}</div>` +
+      `<div class="roster-wallet">${short(row.id)} · ${row.role}</div></div>`;
+    el.appendChild(div);
+  }
+}
+
+document.getElementById('btn-rename').onclick = () => {
+  const wallet = document.getElementById('rename-wallet').value.trim();
+  const displayName = document.getElementById('rename-name').value;
+  if (!wallet) return alert('Paste a wallet address first (any sender in the chat).');
+  chat.setUserProfiles({ [wallet]: { displayName } });
+  log('setUserProfiles', `${short(wallet)} → "${displayName}"`, 'log-ok');
+};
+
+document.getElementById('btn-forget').onclick = () => {
+  const wallet = document.getElementById('rename-wallet').value.trim();
+  if (!wallet) return;
+  chat.invalidateUserProfiles([wallet]);
+  log('invalidateUserProfiles', short(wallet), 'log-warn');
+};
+
+document.getElementById('btn-forget-all').onclick = () => {
+  chat.invalidateUserProfiles();
+  log('invalidateUserProfiles', 'all', 'log-warn');
+};
+
+document.getElementById('btn-hostile').onclick = () => {
+  hostileMode = true;
+  chat.invalidateUserProfiles();
+  log('hostile', 'serving hostile profiles; cache dropped so they re-resolve', 'log-warn');
+};
+
+document.getElementById('btn-normal').onclick = () => {
+  hostileMode = false;
+  chat.invalidateUserProfiles();
+  log('hostile', 'back to normal profiles', 'log-ok');
+};
+
+document.getElementById('btn-clear-log').onclick = () => {
+  logEl.innerHTML = '<div class="log-line">waiting…</div>';
+};
+
+main().catch((err) => {
+  setStatus('mount', 'off', 'mount failed: ' + err.message);
+  log('error', err.message, 'log-warn');
+});
+</script>
+</body>
+</html>

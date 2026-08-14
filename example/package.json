@@ -6,7 +6,8 @@
   "scripts": {
     "start:app-trusted": "node app-trusted/server.js",
     "start:app-trusted+wallet": "node \"app-trusted+wallet/server.js\"",
-    "start:wallet-only": "node wallet-only/server.js"
+    "start:wallet-only": "node wallet-only/server.js",
+    "start:host-identity": "node host-identity/server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
