@@ -83,6 +83,7 @@ export class CherryEmbed {
       position: this.config.position ?? 'inline',
       // Element-level ground so the host never shows through at document boundaries
       backgroundColor: this.config.theme?.backgroundColor,
+      themeMode: this.config.theme?.mode,
     });
 
     // 2a. If mounted collapsed, hide IMMEDIATELY — before awaiting the
@@ -168,9 +169,11 @@ export class CherryEmbed {
     const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
     (this.config as { theme?: EmbedTheme }).theme = merged;
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
-    // Re-resolve the element-side ground — the setTheme command can't reach it
-    if (this.iframe && 'backgroundColor' in theme) {
-      applyIframeBackground(this.iframe, merged.backgroundColor);
+    // Re-resolve the element-side ground — the setTheme command can't reach it.
+    // Unguarded on purpose: `mode` alone re-picks the default ground, so keying
+    // this off `'backgroundColor' in theme` would miss a bare mode flip.
+    if (this.iframe) {
+      applyIframeBackground(this.iframe, merged.backgroundColor, merged.mode);
     }
   }
 

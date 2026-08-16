@@ -6,15 +6,39 @@
  * assertions compare against a probe element fed the same input.
  */
 
+import './jsdomIframe';
 import { describe, it, expect } from 'vitest';
+import { CherryEmbed } from '../embed';
 import { applyIframeBackground, isOpaqueColor } from '../iframe';
+import type { EmbedTheme } from '../types';
 
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
-// The default ground in `iframe.ts`
+// The per-mode defaults in `iframe.ts`
 const DEFAULT_BACKGROUND = '#0a0a0f';
+const DEFAULT_BACKGROUND_LIGHT = '#ffffff';
+
+const EMBED_ORIGIN = 'https://embed.cherry.fun';
+
+function dispatchEmbedEvent(eventName: string, data?: unknown): void {
+  const msg = { type: 'cherry:event', event: eventName, data };
+  window.dispatchEvent(new MessageEvent('message', { data: msg, origin: EMBED_ORIGIN }));
+}
+
+// Mount a real widget (real iframe element, real bridge) and hand back the iframe.
+async function mountEmbed(theme?: EmbedTheme): Promise<{ chat: CherryEmbed; iframe: HTMLIFrameElement }> {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const chat = new CherryEmbed({ appId: 'app-bg', container, theme });
+
+  const mountPromise = chat.mount();
+  dispatchEmbedEvent('ready');
+  await mountPromise;
+
+  return { chat, iframe: container.querySelector('iframe')! };
+}
 
 function createIframe(): HTMLIFrameElement {
   return document.createElement('iframe');
@@ -178,5 +202,107 @@ describe('applyIframeBackground — unset background', () => {
 
     expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
     expect(iframe.style.backgroundColor).not.toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyIframeBackground — the default ground follows the theme mode
+// ---------------------------------------------------------------------------
+
+describe('applyIframeBackground — mode-aware default', () => {
+  it('grounds a light theme on white, not on the dark canvas', () => {
+    const iframe = createIframe();
+
+    applyIframeBackground(iframe, undefined, 'light');
+
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND_LIGHT));
+  });
+
+  it('keeps the dark canvas for an explicit dark mode', () => {
+    const iframe = createIframe();
+
+    applyIframeBackground(iframe, undefined, 'dark');
+
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+  });
+
+  it('keeps the dark canvas when no mode is given', () => {
+    const iframe = createIframe();
+
+    applyIframeBackground(iframe, undefined);
+
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+  });
+
+  it('repaints from dark to light and back as the mode flips', () => {
+    const iframe = createIframe();
+
+    applyIframeBackground(iframe, undefined, 'dark');
+    applyIframeBackground(iframe, undefined, 'light');
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND_LIGHT));
+
+    applyIframeBackground(iframe, undefined, 'dark');
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+  });
+
+  it('lets an explicit background win over the mode default', () => {
+    const iframe = createIframe();
+
+    applyIframeBackground(iframe, '#123456', 'light');
+
+    expect(iframe.style.backgroundColor).toBe(normalized('#123456'));
+  });
+
+  it('keeps a see-through background see-through in light mode', () => {
+    const iframe = createIframe();
+
+    applyIframeBackground(iframe, 'transparent', 'light');
+
+    expect(iframe.style.backgroundColor).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CherryEmbed — the element ground tracks setTheme / resetTheme
+// ---------------------------------------------------------------------------
+
+describe('CherryEmbed — element ground over the theme lifecycle', () => {
+  it('grounds the mounted iframe on white for a light theme', async () => {
+    const { chat, iframe } = await mountEmbed({ mode: 'light' });
+
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND_LIGHT));
+
+    chat.destroy();
+  });
+
+  it('repaints on a mode-only setTheme — no backgroundColor in the patch', async () => {
+    const { chat, iframe } = await mountEmbed({ mode: 'dark' });
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+
+    chat.setTheme({ mode: 'light' });
+
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND_LIGHT));
+
+    chat.destroy();
+  });
+
+  it('keeps an explicit background across an unrelated setTheme', async () => {
+    const { chat, iframe } = await mountEmbed({ mode: 'light', backgroundColor: '#123456' });
+
+    chat.setTheme({ fontSize: 'lg' });
+
+    expect(iframe.style.backgroundColor).toBe(normalized('#123456'));
+
+    chat.destroy();
+  });
+
+  it('falls back to the dark canvas on resetTheme', async () => {
+    const { chat, iframe } = await mountEmbed({ mode: 'light' });
+
+    chat.resetTheme();
+
+    expect(iframe.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+
+    chat.destroy();
   });
 });

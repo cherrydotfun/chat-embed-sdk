@@ -1,7 +1,9 @@
 const DEFAULT_EMBED_URL = 'https://embed.cherry.fun';
 
-/** The embed's own dark canvas (`--bg-primary`), used when no theme sets one. */
-const DEFAULT_BACKGROUND = '#0a0a0f';
+// The embed's own canvases, used when no theme sets a background. Must track the
+// engine's mode defaults (useEmbedTheme DEF_BG_DARK `--bg-primary` / DEF_BG_LIGHT).
+const DEFAULT_BACKGROUND_DARK = '#0a0a0f';
+const DEFAULT_BACKGROUND_LIGHT = '#ffffff';
 
 export function createEmbedIframe(config: {
   appId: string;
@@ -12,6 +14,8 @@ export function createEmbedIframe(config: {
   position: 'inline' | 'floating-right' | 'floating-left';
   /** Theme background, painted on the element itself — see applyIframeBackground. */
   backgroundColor?: string;
+  /** Theme mode — NOT the embed `mode` above. Picks the default ground. */
+  themeMode?: 'dark' | 'light';
 }): HTMLIFrameElement {
   const iframe = document.createElement('iframe');
 
@@ -34,7 +38,7 @@ export function createEmbedIframe(config: {
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.colorScheme = 'normal';
-  applyIframeBackground(iframe, config.backgroundColor);
+  applyIframeBackground(iframe, config.backgroundColor, config.themeMode);
 
   if (config.position === 'inline') {
     iframe.style.display = 'block';
@@ -97,12 +101,16 @@ export function isOpaqueColor(value: string): boolean {
 // Ground the iframe ELEMENT: between documents (mount, reload, remount) the
 // embed has nothing painted yet and the host page would show straight through.
 // Skipped for see-through theme backgrounds — that transparency is intentional.
+// With no theme background the ground follows `mode`, like the engine's own
+// fallback — a light theme must not pre-paint near-black.
 export function applyIframeBackground(
   iframe: HTMLIFrameElement,
   backgroundColor: string | undefined,
+  mode?: 'dark' | 'light',
 ): void {
   if (backgroundColor === undefined || backgroundColor.trim() === '') {
-    iframe.style.backgroundColor = DEFAULT_BACKGROUND;
+    iframe.style.backgroundColor =
+      mode === 'light' ? DEFAULT_BACKGROUND_LIGHT : DEFAULT_BACKGROUND_DARK;
     return;
   }
   iframe.style.backgroundColor = isOpaqueColor(backgroundColor) ? backgroundColor : '';
