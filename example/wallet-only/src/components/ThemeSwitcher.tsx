@@ -8,10 +8,12 @@ interface ThemeSwitcherProps {
 
 export function ThemeSwitcher({ selected, onSelect }: ThemeSwitcherProps) {
   return (
-    <section className="switcher">
+    <section className="card switcher">
       <div className="section-header">
-        <h2>Theme presets</h2>
-        <p>Pick a starting point, then tweak any field below.</p>
+        <div className="sh-title">
+          <h2>Presets</h2>
+        </div>
+        <p>Curated starting palettes. One click applies the whole theme.</p>
       </div>
       <div className="switcher-grid">
         {PRESETS.map((preset) => {

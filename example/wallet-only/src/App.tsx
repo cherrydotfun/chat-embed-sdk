@@ -1,36 +1,35 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DemoConfig, DisplayMode, EmbedTheme, PresetId } from './types';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DemoConfig, DisplayMode, EmbedLayout, EmbedTheme, PresetId } from './types';
 import { DEFAULT_PRESET_ID, PRESETS, PRESET_BY_ID } from './presets';
 import { Marketing } from './components/Marketing';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { ThemeEditor } from './components/ThemeEditor';
+import { LayoutEditor } from './components/LayoutEditor';
 import { DemoChat } from './components/DemoChat';
 import { DisplayModeSelector } from './components/DisplayModeSelector';
 
 /**
- * Merge preset + per-field overrides. Undefined values in `overrides`
- * fall through to the preset; explicit values win.
+ * Keys that survive "Clear granular": the honest seeds + the non-colour
+ * switches. Dropping everything else hands the whole palette back to the
+ * derivation engine, so the Advanced fields fill with grayed derived values.
  */
-function mergeTheme(
-  base: EmbedTheme,
-  overrides: Partial<EmbedTheme>,
-): EmbedTheme {
-  const out: EmbedTheme = { ...base };
-  for (const k of Object.keys(overrides) as (keyof EmbedTheme)[]) {
-    const v = overrides[k];
-    if (v === undefined) continue;
-    (out as Record<string, unknown>)[k] = v;
-  }
-  return out;
-}
+const KEEP_ON_CLEAR: (keyof EmbedTheme)[] = [
+  'mode',
+  'gradients',
+  'primaryColor',
+  'backgroundColor',
+  'accentColor',
+  'incomingBubbleColor',
+  'fontFamily',
+  'fontSize',
+];
 
 /** Cap on the undo/redo stack so a long colour-picker drag can't blow up memory. */
 const HISTORY_CAP = 80;
 
 /**
- * Window during which consecutive overrides updates collapse into a
- * single history entry — colour-picker drags fire onChange dozens of
- * times per second; without this each tick would consume one undo slot.
+ * Window during which consecutive theme updates collapse into a single history
+ * entry — colour-picker drags fire onChange dozens of times per second.
  */
 const HISTORY_DEBOUNCE_MS = 250;
 
@@ -38,38 +37,44 @@ export default function App() {
   const [config, setConfig] = useState<DemoConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<PresetId>(DEFAULT_PRESET_ID);
-  const [overrides, setOverrides] = useState<Partial<EmbedTheme>>({});
+  /**
+   * The working theme (a flat, theme-lab-style field model): a preset seeds it
+   * with a full curated palette, and every field is then independently editable
+   * or clearable. `effective === theme` — this IS what the iframe receives.
+   */
+  const [theme, setTheme] = useState<Partial<EmbedTheme>>(() => ({ ...PRESETS[0].theme }));
   const [history, setHistory] = useState<Partial<EmbedTheme>[]>([]);
   const [redoStack, setRedoStack] = useState<Partial<EmbedTheme>[]>([]);
-  // Bumps every time we want the iframe to clear its theme state before
-  // applying the next setTheme — preset switches and the Reset button
-  // both bump it. Per-field edits do not.
   const [resetTrigger, setResetTrigger] = useState(0);
   /**
-   * On phone-width viewports the inline mount eats the entire screen
-   * with no breathing room for the marketing/editor pane on the left
-   * — the floating launcher is the only mount that gracefully co-
-   * exists with the rest of the demo on narrow widths. Default to it
-   * so mobile visitors immediately see the bubble pop-in animation
-   * instead of a fullscreen chat that looks like the demo broke.
-   *
-   * Read once at mount via lazy initial state so SSR / first paint
-   * stays consistent with the chosen mode (no flash from inline →
-   * floating after hydration).
+   * The full effective `--cherry-*` map the embed emits over the additive
+   * `themeApplied` bridge event after every apply. The SDK bridge does NOT
+   * forward it, so we read the raw `cherry:event` off the window ourselves
+   * (scoped to the embed origin), exactly like the theme-lab. Drives the
+   * Advanced "derived value" prefill + the read-only computed-vars dump.
    */
+  const [derivedVars, setDerivedVars] = useState<Record<string, string> | null>(null);
+
+  // Host-controllable embed chrome (EmbedLayout). Defaults match the embed's
+  // all-shown baseline; pushed live via the SDK's setLayout bridge command.
+  const [layout, setLayout] = useState<EmbedLayout>({
+    showHeader: true,
+    headerTitle: '',
+    showMemberCount: true,
+    showInput: true,
+  });
+  const handleLayoutChange = useCallback(
+    <K extends keyof EmbedLayout>(field: K, value: EmbedLayout[K]) => {
+      setLayout((prev) => ({ ...prev, [field]: value }));
+    },
+    [],
+  );
+
   const [displayMode, setDisplayMode] = useState<DisplayMode>(() => {
     if (typeof window === 'undefined') return 'inline';
     return window.matchMedia('(max-width: 768px)').matches ? 'floating' : 'inline';
   });
 
-  /**
-   * On phone-width viewports, leaving the `floating` launcher (which lives
-   * pinned in the corner) means the chat surface suddenly mounts inline
-   * way below the constructor — the user clicks "Inline" and from their
-   * vantage point nothing changes, because the chat is off-screen down
-   * the page. Two-part hint: scroll the chat-frame into view, and pop a
-   * pill banner over it so the move reads as intentional.
-   */
   const [chatBelowHint, setChatBelowHint] = useState(false);
   const prevDisplayModeRef = useRef(displayMode);
   useEffect(() => {
@@ -88,27 +93,28 @@ export default function App() {
     return () => clearTimeout(t);
   }, [displayMode]);
 
-  /**
-   * Tracks the last overrides snapshot we considered "settled" — once a
-   * debounce window passes without further edits we push it onto the
-   * history stack. Used by the snapshot effect AND by undo/redo to
-   * suppress self-fire (see them sets this ref before mutating overrides).
-   */
-  const lastSnapshotRef = useRef<Partial<EmbedTheme>>({});
+  const lastSnapshotRef = useRef<Partial<EmbedTheme>>(theme);
 
-  // Fetch the public app config exactly once. The endpoint comes from the
-  // dev middleware in vite.config.ts; in production server.js exposes the
-  // same shape from the shared root .env.
-  // Uses Vite's BASE_URL so sub-path deploys (e.g. served at
-  // /chat-embed-example/) resolve to /chat-embed-example/config.json.
+  // Fetch the public app config exactly once. Query overrides (`?appId=`,
+  // `?roomId=`, `?embed=`) win over /config.json — handy for pointing the demo
+  // at a local embed (http://localhost:3002) or a scratch room without editing
+  // the shared .env.
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch(`${import.meta.env.BASE_URL}config.json`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const body = (await res.json()) as DemoConfig;
-        if (!body.appId) throw new Error('Missing appId in /config.json');
-        setConfig(body);
+
+        const qp = new URLSearchParams(window.location.search);
+        const merged: DemoConfig = {
+          ...body,
+          appId: qp.get('appId') || body.appId,
+          roomId: qp.get('roomId') || body.roomId,
+          embedUrl: qp.get('embed') || body.embedUrl,
+        };
+        if (!merged.appId) throw new Error('Missing appId in /config.json');
+        setConfig(merged);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error('[demo] failed to load /config.json', err);
@@ -117,27 +123,88 @@ export default function App() {
     })();
   }, []);
 
-  const preset = PRESET_BY_ID[selectedPreset] ?? PRESETS[0];
-  const effective = useMemo(
-    () => mergeTheme(preset.theme, overrides),
-    [preset, overrides],
-  );
-  const hasOverrides = Object.keys(overrides).length > 0;
+  // Read the engine's applied palette back off the bridge. Narrow + read-only:
+  // only `themeApplied` from the embed origin is ingested; nothing is ever sent.
+  useEffect(() => {
+    if (!config) return;
+    let embedOrigin: string;
+    try {
+      embedOrigin = new URL(config.embedUrl).origin;
+    } catch {
+      return;
+    }
+    const onMessage = (ev: MessageEvent) => {
+      if (ev.origin !== embedOrigin) return;
+      const d = ev.data as
+        | { type?: string; event?: string; data?: { vars?: Record<string, string> } }
+        | undefined;
+      if (!d || typeof d !== 'object') return;
+      if (d.type !== 'cherry:event' || d.event !== 'themeApplied') return;
+      const vars = d.data?.vars;
+      if (vars && typeof vars === 'object') setDerivedVars(vars);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [config]);
 
-  const handleSelectPreset = useCallback((id: PresetId) => {
-    setSelectedPreset(id);
-    setOverrides({});
-    // Reset undo state — preset switches are a clean slate, mid-flight
-    // undo across palettes would land users on inconsistent colours.
+  const preset = PRESET_BY_ID[selectedPreset] ?? PRESETS[0];
+  const isDirty = !shallowEqual(theme, preset.theme);
+
+  // A curated preset sets the full granular palette EXPLICITLY, so editing a
+  // seed can't re-derive the pinned slots (explicit beats derivation) — the
+  // Advanced rows legitimately stay put. When the user HAS changed a seed but
+  // granular pins remain, prompt the existing Clear-granular affordance in
+  // context (never auto-clear). `granularPinned` = there is something
+  // Clear-granular would strip; `seedEdited` = a colour seed diverged from the
+  // active preset.
+  const SEED_COLOR_KEYS: (keyof EmbedTheme)[] = [
+    'primaryColor',
+    'backgroundColor',
+    'accentColor',
+    'incomingBubbleColor',
+  ];
+  const granularPinned = Object.keys(theme).some(
+    (k) => !KEEP_ON_CLEAR.includes(k as keyof EmbedTheme),
+  );
+  const seedEdited = SEED_COLOR_KEYS.some((k) => theme[k] !== preset.theme[k]);
+  const showPinnedHint = granularPinned && seedEdited;
+
+  const applyPreset = useCallback((next: Partial<EmbedTheme>) => {
+    setTheme(next);
+    // A preset / reset is a clean slate: wipe undo history and force the iframe
+    // to resetTheme before the next apply so no stale key lingers.
     setHistory([]);
     setRedoStack([]);
-    lastSnapshotRef.current = {};
+    lastSnapshotRef.current = next;
     setResetTrigger((n) => n + 1);
+  }, []);
+
+  const handleSelectPreset = useCallback(
+    (id: PresetId) => {
+      setSelectedPreset(id);
+      applyPreset({ ...(PRESET_BY_ID[id] ?? PRESETS[0]).theme });
+    },
+    [applyPreset],
+  );
+
+  const handleResetToPreset = useCallback(() => {
+    applyPreset({ ...preset.theme });
+  }, [applyPreset, preset]);
+
+  const handleClearGranular = useCallback(() => {
+    setTheme((prev) => {
+      const next: Partial<EmbedTheme> = {};
+      for (const k of KEEP_ON_CLEAR) {
+        if (prev[k] !== undefined) (next as Record<string, unknown>)[k] = prev[k];
+      }
+      return next;
+    });
+    setRedoStack([]);
   }, []);
 
   const handleFieldChange = useCallback(
     <K extends keyof EmbedTheme>(field: K, value: EmbedTheme[K] | undefined) => {
-      setOverrides((prev) => {
+      setTheme((prev) => {
         const next = { ...prev };
         if (value === undefined || value === '') {
           delete next[field];
@@ -146,43 +213,30 @@ export default function App() {
         }
         return next;
       });
-      // Any user-driven edit invalidates the redo stack — once the user
-      // diverges, the previously-undone path is gone.
       setRedoStack([]);
     },
     [],
   );
 
-  const handleResetOverrides = useCallback(() => {
-    setOverrides({});
-    setHistory([]);
-    setRedoStack([]);
-    lastSnapshotRef.current = {};
-    setResetTrigger((n) => n + 1);
-  }, []);
-
-  // Debounced history snapshot: when overrides settles for HISTORY_DEBOUNCE_MS
-  // without further changes, push the previously-settled snapshot onto
-  // the history stack. This way colour-picker drags collapse into a
-  // single undo step instead of dozens.
+  // Debounced history snapshot: when `theme` settles, push the previous
+  // settled snapshot so colour-picker drags collapse into one undo step.
   useEffect(() => {
-    if (overrides === lastSnapshotRef.current) return;
+    if (theme === lastSnapshotRef.current) return;
     const t = setTimeout(() => {
       setHistory((h) => {
         const prev = lastSnapshotRef.current;
-        // Skip duplicate entries.
         const last = h[h.length - 1];
         if (last && shallowEqual(last, prev)) {
-          lastSnapshotRef.current = overrides;
+          lastSnapshotRef.current = theme;
           return h;
         }
         const next = [...h, prev].slice(-HISTORY_CAP);
-        lastSnapshotRef.current = overrides;
+        lastSnapshotRef.current = theme;
         return next;
       });
     }, HISTORY_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [overrides]);
+  }, [theme]);
 
   const undo = useCallback(() => {
     setHistory((h) => {
@@ -190,7 +244,7 @@ export default function App() {
       const prev = h[h.length - 1];
       setRedoStack((r) => [...r, lastSnapshotRef.current].slice(-HISTORY_CAP));
       lastSnapshotRef.current = prev;
-      setOverrides(prev);
+      setTheme(prev);
       return h.slice(0, -1);
     });
   }, []);
@@ -201,14 +255,11 @@ export default function App() {
       const next = r[r.length - 1];
       setHistory((h) => [...h, lastSnapshotRef.current].slice(-HISTORY_CAP));
       lastSnapshotRef.current = next;
-      setOverrides(next);
+      setTheme(next);
       return r.slice(0, -1);
     });
   }, []);
 
-  // Cmd/Ctrl+Z (undo) and Cmd/Ctrl+Shift+Z OR Cmd/Ctrl+Y (redo).
-  // Skip when the user is typing in an input/textarea so the browser's
-  // own per-input undo keeps working.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const cmd = e.metaKey || e.ctrlKey;
@@ -235,18 +286,18 @@ export default function App() {
   return (
     <div className="page">
       <aside className="left-pane">
-        <Marketing />
-        <section className="construct-intro">
-          <h2>Construct your own chat</h2>
-          <p>Pick a preset, tweak any field — the room on the right is just a live example.</p>
-        </section>
+        <Marketing theme={theme} layout={layout} />
         <DisplayModeSelector selected={displayMode} onSelect={setDisplayMode} />
+        <LayoutEditor layout={layout} onChange={handleLayoutChange} />
         <ThemeSwitcher selected={selectedPreset} onSelect={handleSelectPreset} />
         <ThemeEditor
-          effective={effective}
-          hasOverrides={hasOverrides}
+          effective={theme}
+          derivedVars={derivedVars}
+          isDirty={isDirty}
+          showPinnedHint={showPinnedHint}
           onFieldChange={handleFieldChange}
-          onResetOverrides={handleResetOverrides}
+          onResetToPreset={handleResetToPreset}
+          onClearGranular={handleClearGranular}
           canUndo={history.length > 0}
           canRedo={redoStack.length > 0}
           onUndo={undo}
@@ -257,24 +308,26 @@ export default function App() {
       <main className="right-pane">
         <div className="chat-frame">
           {chatBelowHint && (
-            <div className="chat-below-hint" role="status">Chat moved below ↓</div>
+            <div className="chat-below-hint" role="status">
+              Chat moved below ↓
+            </div>
           )}
           {configError ? (
             <div className="chat-error">
               <h3>Could not load /config.json</h3>
               <p>{configError}</p>
               <p className="chat-error-hint">
-                In dev: ensure <code>chat-embed-sdk/example/.env</code> sets{' '}
-                <code>APP_ID</code> and <code>CHERRY_EMBED_URL</code>, then
-                restart the Vite dev server.
+                In dev: ensure <code>chat-embed-sdk/example/.env</code> sets <code>APP_ID</code>{' '}
+                and <code>CHERRY_EMBED_URL</code>, then restart the Vite dev server.
               </p>
             </div>
           ) : config ? (
             <DemoChat
               config={config}
-              theme={effective}
+              theme={theme}
               resetTrigger={resetTrigger}
               displayMode={displayMode}
+              layout={layout}
             />
           ) : (
             <div className="chat-loading">Loading config…</div>

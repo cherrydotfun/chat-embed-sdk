@@ -6,7 +6,7 @@
  * package is not pulled into the demo's TS resolution because it lives
  * outside this Vite root (and ships as JS at runtime anyway).
  */
-import type { EmbedTheme } from './types';
+import type { EmbedLayout, EmbedTheme } from './types';
 
 export interface MountOptions {
   appId: string;
@@ -14,6 +14,7 @@ export interface MountOptions {
   embedUrl?: string;
   roomId?: string;
   theme?: EmbedTheme;
+  layout?: EmbedLayout;
   position?: 'inline' | 'floating-right' | 'floating-left';
   collapsed?: boolean;
 }
@@ -23,6 +24,7 @@ export interface ChatHandle {
   destroy(): void;
   setTheme(theme: Partial<EmbedTheme>): void;
   resetTheme(): void;
+  setLayout(layout: Partial<EmbedLayout>): void;
   setRoom(roomId: string): void;
   show(): void;
   hide(): void;

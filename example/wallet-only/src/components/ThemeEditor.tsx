@@ -1,355 +1,464 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EmbedTheme } from '../types';
+import {
+  GRANULAR_GROUPS,
+  PARAM_TO_VAR,
+  SAFE_FONTS,
+  SEED_FIELDS,
+  SEED_KEYS,
+  isSafeCssColor,
+  toHexForPicker,
+} from '../themeMeta';
 
 interface ThemeEditorProps {
-  /** Effective theme: preset merged with current overrides — drives the field values shown. */
-  effective: EmbedTheme;
-  /** True iff the user has any overrides on top of the active preset. */
-  hasOverrides: boolean;
+  /** The working theme — a flat field model; this is what the iframe receives. */
+  effective: Partial<EmbedTheme>;
+  /** Full effective `--cherry-*` map read back from the `themeApplied` event. */
+  derivedVars: Record<string, string> | null;
+  /** True when the theme differs from the active preset (enables Reset). */
+  isDirty: boolean;
+  /** True when a seed was edited but the preset still pins granular slots. */
+  showPinnedHint: boolean;
   onFieldChange: <K extends keyof EmbedTheme>(field: K, value: EmbedTheme[K] | undefined) => void;
-  onResetOverrides: () => void;
+  onResetToPreset: () => void;
+  onClearGranular: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
 }
 
-/**
- * Expand `#abc` to `#aabbcc` so a hex shorthand still drives the color
- * picker (which only accepts long-form hex). Returns the input untouched
- * if it isn't shorthand.
- */
-function expandHex(value: string): string {
-  if (/^#[0-9a-fA-F]{3}$/.test(value)) {
-    return (
-      '#' +
-      value
-        .slice(1)
-        .split('')
-        .map((c) => c + c)
-        .join('')
-    );
-  }
-  return value;
-}
-
-/**
- * Best-effort parse of an arbitrary CSS colour into a six-char hex so the
- * native colour picker has something to show. Returns null if we can't
- * project the value into the picker (rgba with alpha, hsl, named colour),
- * in which case the caller renders a neutral swatch and lets the user
- * keep editing the text input.
- */
-function toHexForPicker(value: string | undefined): string | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed;
-  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) return expandHex(trimmed);
-  if (/^#[0-9a-fA-F]{8}$/.test(trimmed)) return trimmed.slice(0, 7);
-  const m = trimmed.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
-  if (m) {
-    const r = Math.min(255, +m[1]);
-    const g = Math.min(255, +m[2]);
-    const b = Math.min(255, +m[3]);
-    const hex = (n: number) => n.toString(16).padStart(2, '0');
-    return `#${hex(r)}${hex(g)}${hex(b)}`;
-  }
-  return null;
-}
-
-/**
- * Generic-free colour row. The `field` is just a string — the parent's
- * `onChange` already handles every theme key, so narrowing here would only
- * fight the union type of EmbedTheme (which mixes string and boolean).
- */
-interface ColorFieldProps {
-  label: string;
-  field: string;
-  value: string | undefined;
-  onChange: (field: string, value: string | undefined) => void;
-  /** Hint shown under the label. */
-  hint?: string;
-}
-
-function ColorField({
-  label,
-  field,
-  value,
-  onChange,
-  hint,
-}: ColorFieldProps) {
-  const hex = toHexForPicker(value) ?? '#000000';
+/* ── ℹ click-tooltip (holds long explainers off the page) ──────────────── */
+function InfoTip({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('click', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
   return (
-    <label className="field">
-      <span className="field-label">
-        <span className="field-label-row">
-          {label}
-          <code className="field-key" title={`chat.setTheme({ ${field}: '...' })`}>
-            {field}
-          </code>
-        </span>
-        {hint ? <span className="field-hint">{hint}</span> : null}
+    <span className="info-wrap" ref={wrapRef}>
+      <button
+        type="button"
+        className="info-tip"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+      >
+        i
+      </button>
+      <span className="info-pop" hidden={!open} role="tooltip">
+        {children}
       </span>
-      <span className="field-control">
-        <input
-          type="color"
-          value={hex}
-          onChange={(e) => onChange(field, e.target.value)}
-          aria-label={`${label} colour picker`}
-        />
-        <input
-          type="text"
-          className="field-text"
-          value={value ?? ''}
-          placeholder="default"
-          onChange={(e) => {
-            const next = e.target.value.trim();
-            onChange(field, next || undefined);
-          }}
-          aria-label={`${label} value`}
-          spellCheck={false}
-        />
-      </span>
-    </label>
+    </span>
   );
 }
 
-const FONTS = [
-  'Outfit',
-  'Inter',
-  'FK Grotesk',
-  'Roboto',
-  'Open Sans',
-  'Lato',
-  'Poppins',
-  'Nunito',
-  'Source Sans Pro',
-  'Montserrat',
-  'system-ui',
-  'sans-serif',
-  'monospace',
-];
+/* ── Segmented control ─────────────────────────────────────────────────── */
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { v: T; label: string }[];
+  value: T | undefined;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <span className="segmented">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          className={value === o.v ? 'on' : undefined}
+          onClick={() => onChange(o.v)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/* ── One colour row (seed or granular) ─────────────────────────────────── */
+interface ColorRowProps {
+  fieldKey: string;
+  label: string;
+  hint?: string;
+  /** Explicit value on the theme object (sent to the iframe). */
+  value: string | undefined;
+  /** Engine-derived value read back from themeApplied (shown grayed when no explicit value). */
+  derivedVal: string | undefined;
+  isSeed?: boolean;
+  onChange: (field: string, value: string | undefined) => void;
+}
+function ColorRow({ fieldKey, label, hint, value, derivedVal, isSeed, onChange }: ColorRowProps) {
+  const hasValue = value !== undefined && value !== '';
+  const isDerived = !hasValue && !!derivedVal;
+
+  const display = hasValue ? value! : isDerived ? derivedVal! : '';
+  const invalid = hasValue && !isSafeCssColor(value!);
+  const hex = toHexForPicker(display) ?? '#808080';
+
+  const textClass = `${!isSeed && isDerived ? ' derived' : ''}${invalid ? ' invalid' : ''}`.trim();
+
+  return (
+    <div className="row">
+      <span className="pname">
+        <span className="pname-label" title={hint}>
+          {label}
+        </span>
+        <code className="pname-key" title={`chat.setTheme({ ${fieldKey}: '…' })`}>
+          {fieldKey}
+        </code>
+      </span>
+      <input
+        type="text"
+        className={textClass || undefined}
+        value={display}
+        placeholder={isSeed ? 'default' : '(derived)'}
+        spellCheck={false}
+        aria-label={`${label} value`}
+        onChange={(e) => onChange(fieldKey, e.target.value.trim() || undefined)}
+      />
+      <input
+        type="color"
+        value={hex}
+        aria-label={`${label} colour picker`}
+        onChange={(e) => onChange(fieldKey, e.target.value)}
+      />
+      {hasValue ? (
+        <button
+          type="button"
+          className="reset-btn"
+          title="Clear — hand this value back to the engine (⟲ to derived)"
+          aria-label={`Clear ${label}`}
+          onClick={() => onChange(fieldKey, undefined)}
+        >
+          ⟲
+        </button>
+      ) : (
+        <span className="reset-spacer" aria-hidden="true" />
+      )}
+    </div>
+  );
+}
 
 export function ThemeEditor({
   effective,
-  hasOverrides,
+  derivedVars,
+  isDirty,
+  showPinnedHint,
   onFieldChange,
-  onResetOverrides,
+  onResetToPreset,
+  onClearGranular,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
 }: ThemeEditorProps) {
-  // Show the platform's accelerator label in the tooltip — Cmd on
-  // Apple, Ctrl elsewhere — so the hint reads natively.
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const isMac =
+    typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
   const mod = isMac ? '⌘' : 'Ctrl';
-  // Helper so the callsites below stay readable. Casts `field` back to
-  // keyof EmbedTheme inside the onChange so the parent handler stays
-  // strongly typed — only the field/value pair flowing through ColorField
-  // is loose, and the surrounding sanitiser in the iframe still rejects
-  // any unknown key on its way to the DOM.
-  const c = (
-    label: string,
-    field: keyof EmbedTheme,
-    hint?: string,
-  ) => (
-    <ColorField
-      label={label}
-      field={field}
-      value={effective[field] as string | undefined}
-      onChange={(f, v) =>
-        onFieldChange(f as keyof EmbedTheme, v as EmbedTheme[keyof EmbedTheme] | undefined)
-      }
-      hint={hint}
-    />
+
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(() => {
+    const json = JSON.stringify(effective, null, 2);
+    const done = () => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    };
+    if (navigator.clipboard) navigator.clipboard.writeText(json).then(done, done);
+    else done();
+  }, [effective]);
+
+  const change = useCallback(
+    (field: string, value: string | undefined) =>
+      onFieldChange(field as keyof EmbedTheme, value as EmbedTheme[keyof EmbedTheme] | undefined),
+    [onFieldChange],
   );
 
+  const rowFor = (fieldKey: string, label: string, hint?: string, isSeed?: boolean) => {
+    const varName = PARAM_TO_VAR[fieldKey as keyof typeof PARAM_TO_VAR];
+    return (
+      <ColorRow
+        key={fieldKey}
+        fieldKey={fieldKey}
+        label={label}
+        hint={hint}
+        isSeed={isSeed}
+        value={effective[fieldKey as keyof EmbedTheme] as string | undefined}
+        derivedVal={varName && derivedVars ? derivedVars[varName] : undefined}
+        onChange={change}
+      />
+    );
+  };
+
+  // ── Live payload summary + engine badge ──────────────────────────────
+  const { engineOn, seedChips, totalKeys } = useMemo(() => {
+    const keys = (Object.keys(effective) as (keyof EmbedTheme)[]).filter((k) => {
+      const v = effective[k];
+      return v !== undefined && v !== '';
+    });
+    const seedLabels: Record<string, string> = {
+      primaryColor: 'primary',
+      backgroundColor: 'bg',
+      accentColor: 'accent',
+    };
+    const present = SEED_KEYS.filter((k) => {
+      const v = effective[k];
+      return typeof v === 'string' && isSafeCssColor(v);
+    });
+    return {
+      engineOn: present.length > 0,
+      seedChips: present.map((k) => seedLabels[k]),
+      totalKeys: keys.length,
+    };
+  }, [effective]);
+
+  const computedRows = useMemo(() => {
+    if (!derivedVars) return [];
+    return Object.keys(derivedVars)
+      .sort()
+      .map((name) => ({ name, value: derivedVars[name] }));
+  }, [derivedVars]);
+
   return (
-    <section className="editor">
+    <section className="card editor">
       <div className="section-header">
-        <h2>Customise</h2>
-        <p>
-          Each field below is a key on the <code>EmbedTheme</code> object you
-          pass to <code>chat.setTheme(...)</code>. Hover the small monospace
-          tag next to a label to see the exact key &amp; usage.
-        </p>
-        <pre className="editor-snippet">
-          <code>{`chat.setTheme({
-  primaryColor: '#fb7185',
-  ownBubbleColor: '#fb7185',
-  ownBubbleTextColor: '#7c2d12',
-  // …any other key shown below
-})`}</code>
-        </pre>
-        <div className="editor-toolbar">
-          <button
-            type="button"
-            className="reset-button"
-            onClick={onResetOverrides}
-            disabled={!hasOverrides}
-          >
-            Reset to preset
-          </button>
-          <button
-            type="button"
-            className="reset-button"
-            onClick={onUndo}
-            disabled={!canUndo}
-            title={`Undo last change (${mod}+Z)`}
-            aria-label="Undo"
-          >
-            ↶ Undo
-          </button>
-          <button
-            type="button"
-            className="reset-button"
-            onClick={onRedo}
-            disabled={!canRedo}
-            title={`Redo (${mod}+Shift+Z)`}
-            aria-label="Redo"
-          >
-            ↷ Redo
-          </button>
+        <div className="sh-title">
+          <h2>Theme</h2>
+          <InfoTip label="How theming works">
+            Pass a few honest brand colours as <b>seeds</b> and the engine derives the whole
+            palette (surfaces, chrome, both bubbles, links, reactions) with contrast guarantees.
+            Any seed engages the engine. <b>Advanced</b> reads every derived value back from the
+            live <code>themeApplied</code> event — edit one to promote it to an explicit override,
+            or ⟲ to hand it back to the engine.
+          </InfoTip>
         </div>
+        <p>Seeds drive the palette. Every derived value is customisable below.</p>
       </div>
 
-      <details className="editor-group" open>
-        <summary>Foundation</summary>
-        <div className="editor-fields">
-          <label className="field">
-            <span className="field-label">Mode</span>
-            <span className="field-control field-control-segmented">
-              {(['dark', 'light'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`segmented${effective.mode === m ? ' segmented-active' : ''}`}
-                  onClick={() => onFieldChange('mode', m)}
-                >
-                  {m}
-                </button>
-              ))}
+      {/* ── Basic: the 2-4 seeds (primary editing surface) ──────────────── */}
+      <div className="sg-title">Basic — seeds</div>
+      <div className="row">
+        <span className="pname">
+          <span className="pname-label">Mode</span>
+          <code className="pname-key">mode</code>
+        </span>
+        <span style={{ gridColumn: '2 / span 3', justifySelf: 'end' }}>
+          <Segmented
+            options={
+              [
+                { v: 'dark', label: 'dark' },
+                { v: 'light', label: 'light' },
+              ] as const
+            }
+            value={effective.mode}
+            onChange={(v) => onFieldChange('mode', v)}
+          />
+        </span>
+      </div>
+      <div className="row">
+        <span className="pname">
+          <span className="pname-label">Gradients</span>
+          <code className="pname-key">gradients</code>
+        </span>
+        <span style={{ gridColumn: '2 / span 3', justifySelf: 'end' }}>
+          <Segmented
+            options={
+              [
+                { v: 'off', label: 'flat' },
+                { v: 'on', label: 'gradient' },
+              ] as const
+            }
+            value={effective.gradients ?? 'off'}
+            onChange={(v) => onFieldChange('gradients', v)}
+          />
+        </span>
+      </div>
+      {SEED_FIELDS.map((s) => rowFor(s.k, s.label, s.hint, true))}
+
+      {/* Preset pins the granular palette → editing a seed can't re-derive the
+       * pinned slots. Surface Clear granular in context (never auto-clear). */}
+      {showPinnedHint && (
+        <div className="seed-pinned-hint" role="note">
+          <span>
+            This preset pins the full palette, so the engine can’t re-derive the slots below from
+            your seeds.
+          </span>
+          <button type="button" className="btn btn-sm" onClick={onClearGranular}>
+            Clear granular
+          </button>
+        </div>
+      )}
+
+      {/* ── Live payload summary ────────────────────────────────────────── */}
+      <div className="payload-chip">
+        <span className={`engine-badge ${engineOn ? 'on' : 'off'}`}>
+          {engineOn ? `engine: ON (${seedChips.join('+')})` : 'engine: OFF'}
+        </span>
+        <span className="pc-label">sending</span>
+        <span className="pc-keys">
+          {seedChips.map((c) => (
+            <span key={c} className="pchip seed">
+              {c}
             </span>
-          </label>
-          {c('Primary', 'primaryColor', 'Drives gradients & accents')}
-          {c('Accent', 'accentColor', 'Secondary brand hue')}
-        </div>
-      </details>
+          ))}
+          <span className="pchip">{totalKeys} keys</span>
+        </span>
+      </div>
 
+      <div className="editor-toolbar">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={copy}
+          aria-label="Copy the current theme object as JSON"
+        >
+          {copied ? 'Copied ✓' : 'Copy theme'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={onClearGranular}
+          title="Drop every granular colour, keep the seeds — the engine re-derives the palette"
+        >
+          Clear granular
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={onResetToPreset}
+          disabled={!isDirty}
+        >
+          Reset to preset
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title={`Undo (${mod}+Z)`}
+          aria-label="Undo"
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title={`Redo (${mod}+Shift+Z)`}
+          aria-label="Redo"
+        >
+          ↷
+        </button>
+      </div>
+
+      {/* ── Typography ──────────────────────────────────────────────────── */}
+      <div className="sg-title">Typography</div>
+      <div className="row">
+        <span className="pname">
+          <span className="pname-label">Font family</span>
+          <code className="pname-key">fontFamily</code>
+        </span>
+        <span style={{ gridColumn: '2 / span 3', justifySelf: 'end' }}>
+          <select
+            value={effective.fontFamily ?? ''}
+            onChange={(e) => onFieldChange('fontFamily', e.target.value || undefined)}
+            aria-label="Font family"
+          >
+            <option value="">default (Inter)</option>
+            {SAFE_FONTS.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+        </span>
+      </div>
+      <div className="row">
+        <span className="pname">
+          <span className="pname-label">Font size</span>
+          <code className="pname-key">fontSize</code>
+        </span>
+        <span style={{ gridColumn: '2 / span 3', justifySelf: 'end' }}>
+          <Segmented
+            options={
+              [
+                { v: 'sm', label: 'sm' },
+                { v: 'md', label: 'md' },
+                { v: 'lg', label: 'lg' },
+              ] as const
+            }
+            value={effective.fontSize}
+            onChange={(v) => onFieldChange('fontSize', v)}
+          />
+        </span>
+      </div>
+
+      {/* ── Advanced: derived palette, promote any value to explicit ────── */}
       <details className="editor-group">
-        <summary>Background &amp; Text</summary>
-        <div className="editor-fields">
-          {c('Page background', 'backgroundColor')}
-          {c('Surface', 'surfaceColor', 'Header & input default')}
-          {c('Border', 'borderColor')}
-          {c('Text', 'textColor')}
-          {c('Text secondary', 'textSecondaryColor')}
-          {c('Links (incoming side)', 'linkColor', 'Links / @mentions / $tickers / handles inside incoming bubbles')}
-          {c('Links (own side)', 'linkColorOwn', 'Same on own bubbles')}
+        <summary>
+          Advanced — derived palette
+          <span className="summary-hint">grayed = engine-derived (not sent); edit to override</span>
+        </summary>
+        <div className="editor-group-body">
+          {GRANULAR_GROUPS.map((g) => (
+            <div key={g.title}>
+              <div className="sg-title">{g.title}</div>
+              {g.params.map((p) => rowFor(p.k, p.label, p.hint))}
+            </div>
+          ))}
         </div>
       </details>
 
+      {/* ── All computed vars (read-only) ───────────────────────────────── */}
       <details className="editor-group">
-        <summary>Header</summary>
-        <div className="editor-fields">
-          {c('Header background', 'headerColor')}
-          {c('Header text', 'headerTextColor')}
+        <summary>
+          Computed vars
+          <span className="summary-hint">read-only — the embed's full effective --cherry-* map</span>
+        </summary>
+        <div className="editor-group-body">
+          {computedRows.length === 0 ? (
+            <p className="cv-empty">
+              Waiting for the chat to mount — the engine hands the full applied palette back over
+              the <code>themeApplied</code> event.
+            </p>
+          ) : (
+            <div className="cv-list">
+              {computedRows.map((r) => {
+                const swatch = toHexForPicker(r.value);
+                return (
+                  <div className="cv-row" key={r.name}>
+                    <span
+                      className="cv-swatch"
+                      style={{ background: swatch ? r.value : 'transparent' }}
+                    />
+                    <span className="cv-name">{r.name}</span>
+                    <span className="cv-val">{r.value}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </details>
-
-      <details className="editor-group">
-        <summary>Bubbles</summary>
-        <div className="editor-fields">
-          {c('Incoming bubble', 'incomingBubbleColor')}
-          {c('Incoming bubble border', 'incomingBubbleBorderColor')}
-          {c('Own bubble', 'ownBubbleColor', 'Solid colour overrides the gradient')}
-          {c('Own bubble text', 'ownBubbleTextColor')}
-        </div>
-      </details>
-
-      <details className="editor-group">
-        <summary>Input &amp; Send</summary>
-        <div className="editor-fields">
-          {c('Input background', 'inputColor')}
-          {c('Input text', 'inputTextColor')}
-          {c('Send button', 'sendButtonColor', 'Solid colour overrides the gradient')}
-          {c('Icon button', 'iconButtonColor', 'Emoji / GIF / attach icons')}
-          {c('Icon button hover', 'iconButtonHoverColor')}
-        </div>
-      </details>
-
-      <details className="editor-group">
-        <summary>Embeds &amp; per-side accents</summary>
-        <div className="editor-fields">
-          {c('Own-side embed background', 'ownEmbedBgColor', 'All embed cards on own bubbles (token / link / group / reply quote). Defaults to a shade of own bubble.')}
-          {c('Other-side embed background', 'otherEmbedBgColor', 'Same on incoming messages. Defaults to a shade of incoming bubble.')}
-          {c('Own accent (soft)', 'messageOwnAccentSoftColor', 'Reply bar stripe + reaction passive on own')}
-          {c('Other accent (soft)', 'messageOtherAccentSoftColor', 'Reply bar stripe on incoming')}
-          {c('Own message accent', 'messageOwnAccentColor', 'Inline reaction (own active)')}
-          {c('Other message accent', 'messageOtherAccentColor', 'Inline reaction (other active)')}
-        </div>
-      </details>
-
-      <details className="editor-group">
-        <summary>Floating UI &amp; loaders</summary>
-        <div className="editor-fields">
-          {c('Message actions menu', 'messageActionsColor')}
-          {c('Message actions text', 'messageActionsTextColor')}
-          {c('Tooltip', 'tooltipColor')}
-          {c('Tooltip text', 'tooltipTextColor')}
-          {c('Emoji picker', 'emojiPickerColor')}
-          {c('Avatar hover', 'avatarHoverColor', 'rgba accepted')}
-          {c('Loader', 'loaderColor')}
-        </div>
-      </details>
-
-      <details className="editor-group">
-        <summary>Modals &amp; danger</summary>
-        <div className="editor-fields">
-          {c('Modal overlay', 'modalOverlayColor', 'rgba(0,0,0,0.6) etc.')}
-          {c('Danger / error', 'dangerColor')}
-        </div>
-      </details>
-
-      <details className="editor-group">
-        <summary>Typography</summary>
-        <div className="editor-fields">
-          <label className="field">
-            <span className="field-label">Font family</span>
-            <span className="field-control">
-              <select
-                value={effective.fontFamily ?? ''}
-                onChange={(e) =>
-                  onFieldChange('fontFamily', e.target.value || undefined)
-                }
-              >
-                <option value="">default</option>
-                {FONTS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </span>
-          </label>
-          <label className="field">
-            <span className="field-label">Font size</span>
-            <span className="field-control field-control-segmented">
-              {(['sm', 'md', 'lg'] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className={`segmented${effective.fontSize === s ? ' segmented-active' : ''}`}
-                  onClick={() => onFieldChange('fontSize', s)}
-                >
-                  {s.toUpperCase()}
-                </button>
-              ))}
-            </span>
-          </label>
-        </div>
-      </details>
-
     </section>
   );
 }
