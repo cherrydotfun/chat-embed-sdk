@@ -35,7 +35,7 @@ function buildSnippet(theme: Partial<EmbedTheme>, layout: EmbedLayout): string {
   if (ht) layoutEntries.push(`headerTitle: '${ht.replace(/'/g, "\\'")}'`);
   const layoutLine = layoutEntries.length ? `\n    layout: { ${layoutEntries.join(', ')} },` : '';
 
-  return `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>
+  return `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.2.0/dist/index.global.js"></script>
 <div id="cherry-chat" style="height: 600px"></div>
 <script>
   new window.CherryEmbedSDK.CherryEmbed({

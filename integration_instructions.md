@@ -30,7 +30,7 @@ npm install @cherrydotfun/chat-embed-sdk
 ```
 
 > No build step? Load it from jsDelivr instead — the bundle exposes `window.CherryEmbedSDK`:
-> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>`
+> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.2.0/dist/index.global.js"></script>`
 
 ### 3. Mount the chat
 
@@ -100,7 +100,7 @@ npm install @cherrydotfun/chat-embed-sdk
 ```
 
 > No build step? Load it from jsDelivr instead — the bundle exposes `window.CherryEmbedSDK`:
-> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>`
+> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.2.0/dist/index.global.js"></script>`
 
 You will also need a JWT library on the backend, e.g. `jsonwebtoken`:
 
