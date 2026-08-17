@@ -219,12 +219,35 @@ identity.get('/users/:id', (req, res) => {
 
 app.use('/identity', identity);
 
+/**
+ * base58 encoder (Bitcoin alphabet), so demo wallets are shaped like REAL ones.
+ *
+ * This matters more than it looks: the composer attaches the picked wallet to a
+ * mention as an invisible tag, and the readers only recognise that tag when the
+ * address is valid base58 (no 0, O, I, l). A hex-ish "wallet" makes the tag
+ * render as visible junk next to the name — a bug in the bench, not in Cherry.
+ */
+function base58(buffer) {
+  const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let num = BigInt('0x' + buffer.toString('hex'));
+  let out = '';
+  while (num > 0n) {
+    out = ALPHABET[Number(num % 58n)] + out;
+    num /= 58n;
+  }
+  for (const byte of buffer) {
+    if (byte === 0) out = '1' + out;
+    else break;
+  }
+  return out;
+}
+
 /** What the page shows as "your app's directory" — also the search corpus. */
 function demoRoster(origin) {
-  // Deterministic pseudo-wallets: base58-ish, stable across restarts.
+  // Deterministic pseudo-wallets, stable across restarts: 32 bytes → base58,
+  // i.e. the same shape and charset as a Solana public key.
   return Array.from({ length: 24 }, (_, i) => {
-    const seed = crypto.createHash('sha256').update(`cherry-demo-${i}`).digest('hex');
-    const wallet = `Demo${seed.slice(0, 40)}`;
+    const wallet = base58(crypto.createHash('sha256').update(`cherry-demo-${i}`).digest());
     return { id: wallet, ...profileFor(wallet, origin) };
   });
 }
