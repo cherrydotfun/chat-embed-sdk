@@ -125,10 +125,13 @@
       font-size: 10px; color: var(--text-muted);
     }
     .person-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    /* min-width: 0 — without it a long avatar URL stretches the grid column and
+       the inputs overflow the card. */
+    .person-body { min-width: 0; }
     .person-body > * + * { margin-top: 6px; }
     .person-wallet { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
     .person-fields { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
-    .person input { font-size: 12px; padding: 5px 8px; }
+    .person input { font-size: 12px; padding: 5px 8px; min-width: 0; }
     .person .row button { padding: 4px 10px; font-size: 12px; }
 
     .roster { max-height: 220px; overflow: auto; }
