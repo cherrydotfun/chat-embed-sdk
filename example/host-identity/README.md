@@ -82,20 +82,43 @@ undo them.
 
 ## 5. Test the HTTP transport
 
-The page shows the exact URL to paste — `http://localhost:3000/identity`, port
-per your `.env` — into **Profile endpoint** in the portal. Save, then reload the
-bench.
+So far the **page** answered. In HTTP mode the iframe calls your backend
+directly and never asks the page — the path that matters for mobile WebViews,
+where the host page is a thin shim.
 
-Now the iframe calls this backend directly instead of the page. The **http
-endpoint** status dot turns green and the log fills with `http resolve` /
-`http search` lines coming from the server. Names and avatars should be
-identical: same contract, different transport.
+Paste the URL the status card shows — `http://localhost:3000/identity`, port per
+your `.env` — into **Profile endpoint** for the embed, save, reload the bench.
 
-This is the path that matters for mobile WebViews, where the host page is a thin
-shim and cannot host handlers. Note that the request carries no cookies
-(`credentials: 'omit'`) — pass a bearer token with `chat.setIdentityToken(token)`
-if your endpoint needs auth, and allow `https://embed.cherry.fun` in its CORS
-config (this server already does).
+You then see:
+
+- **http endpoint: answering (iframe → endpoint)** in the status card. Only a hit
+  carrying `X-Cherry-App-Id` flips it: that header is present when the iframe
+  called, absent when the page did;
+- `http resolve` lines in the log instead of `backend resolve`;
+- the same names and avatars as before — same contract, different transport;
+- the **Chat users** panel still fills in, because the endpoint reports the
+  wallets it was asked about back to the page. Edits and answer modes are
+  mirrored to the backend, so they work here too.
+
+### Locally vs. against stage
+
+Locally both sides are `http`, so nothing else is needed: run the bench, the
+embed dev server (`localhost:3002`), the API and the realtime service, and point
+**Profile endpoint** at `http://localhost:<bench port>/identity`. CORS is already
+allowed for `localhost:3002`.
+
+Against a **stage/production** embed the iframe is served over `https`, and a
+request to `http://localhost` is blocked as mixed content. Expose the bench over
+https first, e.g.
+
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
+
+and use the tunnel's `https://…/identity` as the endpoint. The bench allows the
+embed origin from `CHERRY_EMBED_URL` automatically. The request carries no
+cookies (`credentials: 'omit'`) — pass a bearer token with
+`chat.setIdentityToken(token)` if your endpoint needs auth.
 
 ## 6. Answer modes: seeing Cherry's own identities, and the sanitizer probe
 

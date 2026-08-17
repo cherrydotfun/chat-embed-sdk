@@ -262,6 +262,15 @@ function answerFor(wallet, origin, roster) {
   return roster.get(wallet) ?? profileFor(wallet, origin);
 }
 
+/**
+ * Wallets the ENDPOINT has been asked about, with the answer given.
+ *
+ * In HTTP mode the page never sees a resolve — the iframe calls this backend
+ * directly — so without this the "Chat users" panel stays empty and there is
+ * nothing to edit. The page polls it and folds the wallets into its roster.
+ */
+const seenByEndpoint = new Map();
+
 /** Log every hit so the page can show what the iframe actually asked for. */
 const httpLog = [];
 function note(entry) {
@@ -282,6 +291,10 @@ identity.post('/resolve', (req, res) => {
     // Directory wallets answer with their DIRECTORY identity, so someone picked
     // from @mention autocomplete doesn't get renamed on the next resolve.
     users[id] = answerFor(id, origin, roster);
+    // Remember the wallet and what the DIRECTORY would say for it, so the page
+    // can show a row with a meaningful placeholder even in HTTP mode.
+    const backend = roster.get(id) ?? profileFor(id, origin);
+    seenByEndpoint.set(id, { displayName: backend.displayName, avatarUrl: backend.avatarUrl });
   }
   note({
     op: 'resolve',
@@ -379,6 +392,11 @@ app.get('/api/config', (req, res) => {
 
 /** Recent hits on the HTTP transport, so the page can prove which one ran. */
 app.get('/api/identity-log', (req, res) => res.json({ entries: httpLog.slice(-30) }));
+
+/** Wallets the endpoint answered for — the page's roster in HTTP mode. */
+app.get('/api/bench/seen', (req, res) =>
+  res.json({ users: Object.fromEntries(seenByEndpoint) }),
+);
 
 // ---- Optional: embedToken for app-trusted / app-trusted+wallet embeds ----
 //

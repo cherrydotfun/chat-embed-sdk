@@ -496,11 +496,28 @@ async function main() {
   pollHttpLog();
 }
 
-/** Surfaces hits on the HTTP transport — proof of WHICH transport answered. */
+/**
+ * Surface hits on the HTTP transport — proof of WHICH transport answered — and
+ * fold the wallets the ENDPOINT was asked about into the roster.
+ *
+ * That second half matters: in HTTP mode the iframe never asks this page, so
+ * `resolveUsers` never runs and the panel would stay empty with nothing to edit.
+ */
 async function pollHttpLog() {
   let lastSeen = 0;
   setInterval(async () => {
     try {
+      const { users } = await fetch('/api/bench/seen').then((r) => r.json());
+      let added = false;
+      for (const [wallet, profile] of Object.entries(users || {})) {
+        if (!seenWallets.has(wallet)) {
+          seenWallets.add(wallet);
+          added = true;
+        }
+        if (!backendProfiles.has(wallet)) backendProfiles.set(wallet, profile);
+      }
+      if (added) renderPeople();
+
       const { entries } = await fetch('/api/identity-log').then((r) => r.json());
       const fresh = entries.slice(lastSeen);
       lastSeen = entries.length;
