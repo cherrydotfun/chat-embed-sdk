@@ -88,13 +88,30 @@ app.get('/cherry-embed.js', (req, res) => {
 // integration where every participant IS one of its users.
 // ============================================================
 
-const FIRST_NAMES = [
+// Two DISJOINT name pools, and this split matters for the bench's credibility.
+//
+// With one small pool, a chat participant and a directory row kept landing on
+// the same name — 16 × 8 = 128 combinations across ~27 shown people means a
+// collision ~95% of the time — and the tester reasonably reads that as "the
+// overlay fell back to the wrong user". Members draw from one pool, the
+// searchable directory from the other, so a name can never appear in both.
+const MEMBER_FIRST = [
   'Alice', 'Bruno', 'Carmen', 'Dmitri', 'Elena', 'Farid', 'Greta', 'Hugo',
   'Ines', 'Jonas', 'Kira', 'Lars', 'Maya', 'Nils', 'Olive', 'Piotr',
 ];
-const LAST_NAMES = [
+const MEMBER_LAST = [
   'Rivera', 'Okafor', 'Sandberg', 'Duarte', 'Novak', 'Haddad', 'Lindqvist', 'Mensah',
+  'Ferrand', 'Bakker', 'Costa', 'Ilves', 'Marchetti', 'Sorensen', 'Varga', 'Whitlock',
 ];
+const DIR_FIRST = [
+  'Anouk', 'Bodhi', 'Csilla', 'Davide', 'Esme', 'Fabio', 'Gunnar', 'Hedda',
+  'Ivar', 'Juno', 'Katla', 'Leif', 'Mira', 'Nuno', 'Orla', 'Pavel',
+];
+const DIR_LAST = [
+  'Almeida', 'Berglund', 'Cardoso', 'Dvorak', 'Eriksen', 'Fontaine', 'Gruber', 'Halonen',
+  'Iversen', 'Janssen', 'Kovacs', 'Laurent', 'Moreau', 'Nagy', 'Olsen', 'Petrov',
+];
+
 const ROLES = ['trader', 'builder', 'analyst', 'degen', 'lurker', 'mod'];
 
 /** Stable 32-bit hash so a wallet always maps to the same fake user. */
@@ -113,10 +130,14 @@ function hash(value) {
  * CDN: the bench must work offline, and it doubles as proof that an ordinary
  * cross-origin image URL is all the embed needs.
  */
-function profileFor(walletAddress, origin) {
+function profileFor(walletAddress, origin, pool) {
+  const { first: firstNames, last: lastNames } = pool ?? {
+    first: MEMBER_FIRST,
+    last: MEMBER_LAST,
+  };
   const h = hash(walletAddress);
-  const first = FIRST_NAMES[h % FIRST_NAMES.length];
-  const last = LAST_NAMES[(h >> 4) % LAST_NAMES.length];
+  const first = firstNames[h % firstNames.length];
+  const last = lastNames[(h >> 4) % lastNames.length];
   const role = ROLES[(h >> 8) % ROLES.length];
   return {
     displayName: `${first} ${last}`,
@@ -134,10 +155,13 @@ function originOf(req) {
 
 // ---- Avatars: deterministic SVG, no external dependency ----
 app.get('/avatars/:seed.svg', (req, res) => {
+  const dir = req.query.dir === '1';
+  const firstNames = dir ? DIR_FIRST : MEMBER_FIRST;
+  const lastNames = dir ? DIR_LAST : MEMBER_LAST;
   const h = hash(req.params.seed);
   const hue = h % 360;
-  const initials = `${FIRST_NAMES[h % FIRST_NAMES.length][0]}${
-    LAST_NAMES[(h >> 4) % LAST_NAMES.length][0]
+  const initials = `${firstNames[h % firstNames.length][0]}${
+    lastNames[(h >> 4) % lastNames.length][0]
   }`;
   res.type('image/svg+xml').send(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
@@ -186,12 +210,15 @@ function note(entry) {
 identity.post('/resolve', (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
   const origin = originOf(req);
+  const roster = new Map(demoRoster(origin).map((u) => [u.id, u]));
   const users = {};
   for (const id of ids) {
     if (typeof id !== 'string' || !id) continue;
     // A real backend returns null for wallets it doesn't know — the chat then
     // falls back to the Cherry identity for that person instead of asking again.
-    users[id] = profileFor(id, origin);
+    // Directory wallets answer with their DIRECTORY identity, so someone picked
+    // from @mention autocomplete doesn't get renamed on the next resolve.
+    users[id] = roster.get(id) ?? profileFor(id, origin);
   }
   note({ op: 'resolve', count: ids.length, appId: req.get('X-Cherry-App-Id') || null });
   res.json({ users });
@@ -214,7 +241,11 @@ identity.get('/search', (req, res) => {
 // GET /identity/users/:id -> profile | null
 identity.get('/users/:id', (req, res) => {
   note({ op: 'get', id: req.params.id });
-  res.json(profileFor(req.params.id, originOf(req)));
+  const origin = originOf(req);
+  // A directory row asked for by id keeps its directory name; anything else is
+  // a chat member.
+  const row = demoRoster(origin).find((u) => u.id === req.params.id);
+  res.json(row ?? profileFor(req.params.id, origin));
 });
 
 app.use('/identity', identity);
@@ -246,10 +277,19 @@ function base58(buffer) {
 function demoRoster(origin) {
   // Deterministic pseudo-wallets, stable across restarts: 32 bytes → base58,
   // i.e. the same shape and charset as a Solana public key.
-  return Array.from({ length: 24 }, (_, i) => {
+  //
+  // Names are de-duplicated: two rows reading "Maya Duarte" in the same list
+  // would make the bench look like it mixed two users up.
+  const seen = new Set();
+  const rows = [];
+  for (let i = 0; rows.length < 24 && i < 500; i++) {
     const wallet = base58(crypto.createHash('sha256').update(`cherry-demo-${i}`).digest());
-    return { id: wallet, ...profileFor(wallet, origin) };
-  });
+    const profile = profileFor(wallet, origin, { first: DIR_FIRST, last: DIR_LAST });
+    if (seen.has(profile.displayName)) continue;
+    seen.add(profile.displayName);
+    rows.push({ id: wallet, ...profile, avatarUrl: `${profile.avatarUrl}?dir=1` });
+  }
+  return rows;
 }
 
 // ---- Page bootstrap ----

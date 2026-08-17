@@ -67,7 +67,7 @@ so too.
 | Try this | Expected |
 |---|---|
 | Paste a wallet in **Push a change** → `setUserProfiles()` | That sender is renamed **immediately**, everywhere in the open chat — no reload, and their avatar stays put (pushed fields are merged, not swapped in wholesale). This is the one that matters: a rename in your app is invisible otherwise, since the iframe only asks about wallets it hasn't resolved yet. |
-| **invalidate(wallet)** | The name reverts, then the chat asks about that wallet again (`users.resolve` in the log) and it comes back. |
+| **invalidate(wallet)** | The name **stays on screen** while the chat re-asks (`users.resolve` in the log) and then updates. It deliberately does not blink back to the Cherry identity in between — invalidating means "refresh this", not "forget them". To forget someone, push `null` for their wallet. |
 | Type `@` and a name from **Your app's directory** in the composer | The dropdown lists your users — `users.search` appears in the log. Cherry's own search only knows sol domains and wallets, so this is the difference between "@Alice finds nothing" and "@Alice finds Alice". |
 | Pick a suggestion and send | The message contains `@Alice_Rivera`. Spaces become underscores on purpose: the mention grammar stops at the first space, so an untouched name would be cut in half. The wallet rides along invisibly, so the mention still routes. |
 | Return `null` for a wallet (edit `resolveUsers` in `public/index.html`) | That person keeps their Cherry identity, and the chat stops asking about them. |
@@ -118,3 +118,8 @@ bug in the embed's sanitizer — not in this page.
 The directory in `server.js` maps **any** wallet to a stable fake user, so the
 bench stays useful in a room full of strangers. A real integration queries its
 own users table and returns `null` for wallets it doesn't recognise.
+
+Chat members and the searchable directory draw from two **disjoint** name pools,
+so a participant's name is never also a row in the directory list — with one
+shared pool the names collided constantly and read as "the overlay resolved the
+wrong user".
