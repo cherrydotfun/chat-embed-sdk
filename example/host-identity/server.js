@@ -65,6 +65,10 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 // mints tokens for whatever its mock session holds.
 const HOST = process.env.HOST || '127.0.0.1';
 
+// Which wallet this bench signs in as, for app-trusted embeds. A real backend
+// takes this from its own session — see the banner on /api/embed-token.
+const DEMO_VIEWER_WALLET = process.env.DEMO_VIEWER_WALLET || '';
+
 // ---- Static files + the SDK bundle ----
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/cherry-embed.js', (req, res) => {
@@ -232,6 +236,9 @@ app.get('/api/config', (req, res) => {
     roomId: ROOM_ID,
     embedUrl: CHERRY_EMBED_URL,
     hasSecret: !!APP_SECRET,
+    // DEMO ONLY — a real backend never tells the browser whose session it is
+    // about to vouch for; it just signs for the user it already authenticated.
+    viewerWallet: DEMO_VIEWER_WALLET,
     resolverUrl: `${originOf(req)}/identity`,
     directory: demoRoster(originOf(req)),
   });

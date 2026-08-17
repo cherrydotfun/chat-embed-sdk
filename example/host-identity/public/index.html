@@ -340,8 +340,23 @@ async function main() {
     return;
   }
 
+  // app-trusted embeds are signed in by the backend — no wallet extension in
+  // the loop, which is what makes this bench runnable anywhere. wallet-only
+  // embeds skip this and connect from inside the iframe.
+  let token;
+  if (config.hasSecret && config.viewerWallet) {
+    const minted = await fetch('/api/embed-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: config.viewerWallet }),
+    }).then((r) => r.json());
+    token = minted.embedToken;
+    log('auth', token ? `embedToken minted for ${short(config.viewerWallet)}` : minted.error, token ? 'log-ok' : 'log-warn');
+  }
+
   chat = new CherryEmbedSDK.CherryEmbed({
     appId: config.appId,
+    ...(token ? { token } : {}),
     roomId: config.roomId,
     container: '#chat',
     embedUrl: config.embedUrl,
