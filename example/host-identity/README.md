@@ -66,7 +66,7 @@ so too.
 
 | Try this | Expected |
 |---|---|
-| Paste a wallet in **Push a change** → `setUserProfiles()` | That sender is renamed **immediately**, everywhere in the open chat — no reload. This is the one that matters: a rename in your app is invisible otherwise, since the iframe only asks about wallets it hasn't resolved yet. |
+| Paste a wallet in **Push a change** → `setUserProfiles()` | That sender is renamed **immediately**, everywhere in the open chat — no reload, and their avatar stays put (pushed fields are merged, not swapped in wholesale). This is the one that matters: a rename in your app is invisible otherwise, since the iframe only asks about wallets it hasn't resolved yet. |
 | **invalidate(wallet)** | The name reverts, then the chat asks about that wallet again (`users.resolve` in the log) and it comes back. |
 | Type `@` and a name from **Your app's directory** in the composer | The dropdown lists your users — `users.search` appears in the log. Cherry's own search only knows sol domains and wallets, so this is the difference between "@Alice finds nothing" and "@Alice finds Alice". |
 | Pick a suggestion and send | The message contains `@Alice_Rivera`. Spaces become underscores on purpose: the mention grammar stops at the first space, so an untouched name would be cut in half. The wallet rides along invisibly, so the mention still routes. |
