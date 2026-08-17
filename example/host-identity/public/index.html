@@ -112,6 +112,25 @@
     .log-ok { color: var(--green); }
     .log-warn { color: var(--yellow); }
 
+    .people { max-height: 340px; overflow: auto; }
+    .person {
+      display: grid; gap: 6px; padding: 10px 0;
+      grid-template-columns: 32px minmax(0, 1fr);
+      align-items: start;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .person-avatar {
+      width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+      background: var(--surface2); display: grid; place-items: center;
+      font-size: 10px; color: var(--text-muted);
+    }
+    .person-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .person-body > * + * { margin-top: 6px; }
+    .person-wallet { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+    .person-fields { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+    .person input { font-size: 12px; padding: 5px 8px; }
+    .person .row button { padding: 4px 10px; font-size: 12px; }
+
     .roster { max-height: 220px; overflow: auto; }
     .roster-row {
       display: flex; align-items: center; gap: 10px; padding: 6px 0;
@@ -159,24 +178,29 @@
 
       <!-- ── Live changes ───────────────────────────────────────────────── -->
       <section class="card">
-        <div class="card-head"><span class="card-title">Push a change</span></div>
+        <div class="card-head">
+          <span class="card-title">Chat users</span>
+          <span class="header-note">edit a name or avatar by hand</span>
+        </div>
         <div class="card-body">
-          <div>
-            <label for="rename-wallet">Wallet</label>
-            <input id="rename-wallet" type="text" placeholder="paste a wallet from the chat" />
-          </div>
-          <div>
-            <label for="rename-name">New display name</label>
-            <input id="rename-name" type="text" value="Renamed Live ✨" />
+          <div id="people" class="people">
+            <p class="hint" id="people-empty">
+              Rows appear as the chat asks about wallets. Open a room with messages, or
+              add a wallet below.
+            </p>
           </div>
           <div class="row">
-            <button id="btn-rename" class="primary">setUserProfiles()</button>
-            <button id="btn-forget">invalidate(wallet)</button>
+            <input id="add-wallet" type="text" placeholder="add a wallet by hand" />
+            <button id="btn-add">Add</button>
+          </div>
+          <div class="row">
             <button id="btn-forget-all" class="danger">invalidate all</button>
           </div>
           <p class="hint">
-            A rename is invisible to an open chat without this: the iframe only asks about
-            wallets it hasn't resolved yet.
+            <strong>Apply</strong> pushes your edits into the running chat — that is the only
+            way an open chat learns about a rename, since the iframe asks only about wallets it
+            hasn't resolved yet. Clear a field and apply to drop it (the other one survives).
+            <strong>Reset</strong> forgets your edit and re-asks the backend.
           </p>
         </div>
       </section>
@@ -233,8 +257,36 @@
 // Bench state
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Wallets the chat has asked about, so the rename field can be prefilled. */
+/** Wallets the chat has asked about — the roster the panel renders. */
 const seenWallets = new Set();
+/** What the backend last answered per wallet, shown as the row's placeholder. */
+const backendProfiles = new Map();
+
+/**
+ * Hand-typed profiles, keyed by wallet.
+ *
+ * These stand in for "an admin edited this user in your app": they win over the
+ * backend inside `resolveUsers`, so they survive an invalidate and an iframe
+ * reload instead of being overwritten by the next resolve. Kept in
+ * localStorage because a bench you have to re-fill after every reload doesn't
+ * get used.
+ */
+const OVERRIDES_KEY = 'cherry-bench-overrides';
+const overrides = new Map(Object.entries(readOverrides()));
+
+function readOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveOverrides() {
+  try {
+    localStorage.setItem(OVERRIDES_KEY, JSON.stringify(Object.fromEntries(overrides)));
+  } catch { /* private mode — edits just won't survive a reload */ }
+}
 /** Flipped by the "Hostile profiles" button — see buildProfile(). */
 let hostileMode = false;
 /** When false, resolveUsers/searchUsers are not registered (METHOD_NOT_FOUND). */
@@ -302,17 +354,25 @@ async function fetchProfiles(wallets) {
 
 async function resolveUsers(wallets) {
   wallets.forEach((w) => seenWallets.add(w));
-  prefillRenameField();
   log('users.resolve', `${wallets.length} wallet(s): ${wallets.map(short).join(', ')}`);
   const rows = await fetchProfiles(wallets);
   const out = {};
   for (const wallet of wallets) {
     const row = rows[wallet];
+    if (row) backendProfiles.set(wallet, { displayName: row.displayName, avatarUrl: row.avatarUrl });
+    // A hand-typed profile is the app's current truth, so it wins here too —
+    // otherwise the next resolve would quietly undo your edit.
+    const manual = overrides.get(wallet);
+    if (manual) {
+      out[wallet] = manual;
+      continue;
+    }
     // A real app returns null for wallets it doesn't know; the chat then keeps
     // the Cherry identity for that person instead of asking again.
     out[wallet] = row ? buildProfile(wallet, row) : null;
   }
   log('→ answered', Object.values(out).filter(Boolean).length + ' profile(s)', 'log-ok');
+  renderPeople();
   return out;
 }
 
@@ -335,6 +395,10 @@ async function main() {
   config = await fetch('/api/config').then((r) => r.json());
   document.getElementById('resolver-url').textContent = config.resolverUrl;
   renderRoster(config.directory);
+  // Edits restored from a previous session belong on screen before the first
+  // resolve lands, so they are visible as the reason those names look custom.
+  overrides.forEach((_, wallet) => seenWallets.add(wallet));
+  renderPeople();
 
   if (!config.appId || !config.roomId) {
     setStatus('mount', 'off', 'APP_ID / ROOM_ID missing — fill in example/.env');
@@ -411,9 +475,126 @@ async function pollHttpLog() {
 // Controls
 // ─────────────────────────────────────────────────────────────────────────────
 
-function prefillRenameField() {
-  const input = document.getElementById('rename-wallet');
-  if (!input.value && seenWallets.size) input.value = [...seenWallets][0];
+/**
+ * Render one editable row per wallet the chat has asked about.
+ *
+ * Inputs are only (re)filled when they are not focused, so a render triggered
+ * by a background resolve can't yank text out from under the cursor.
+ */
+function renderPeople() {
+  const host = document.getElementById('people');
+  const wallets = [...seenWallets];
+  const empty = document.getElementById('people-empty');
+  if (empty) empty.style.display = wallets.length ? 'none' : '';
+
+  for (const wallet of wallets) {
+    let row = host.querySelector(`[data-wallet="${wallet}"]`);
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'person';
+      row.dataset.wallet = wallet;
+      row.innerHTML =
+        '<div class="person-avatar" data-role="avatar"></div>' +
+        '<div class="person-body">' +
+        `<div class="person-wallet">${short(wallet)}</div>` +
+        '<div class="person-fields">' +
+        '<input type="text" data-role="name" spellcheck="false" />' +
+        '<input type="text" data-role="avatarUrl" spellcheck="false" />' +
+        '<p class="hint" data-role="avatar-warning" style="display:none"></p>' +
+        '</div>' +
+        '<div class="row">' +
+        '<button data-role="apply" class="primary">Apply</button>' +
+        '<button data-role="reset">Reset</button>' +
+        '</div></div>';
+      host.appendChild(row);
+
+      row.querySelector('[data-role="apply"]').onclick = () => applyPerson(wallet, row);
+      row.querySelector('[data-role="reset"]').onclick = () => resetPerson(wallet, row);
+      row.querySelector('[data-role="avatarUrl"]').oninput = () => checkAvatarField(row);
+    }
+
+    const manual = overrides.get(wallet);
+    const backend = backendProfiles.get(wallet) ?? {};
+    const nameInput = row.querySelector('[data-role="name"]');
+    const avatarInput = row.querySelector('[data-role="avatarUrl"]');
+
+    // Placeholder shows what the backend would answer; the value shows your edit.
+    nameInput.placeholder = backend.displayName || 'display name';
+    avatarInput.placeholder = backend.avatarUrl || 'https://…/avatar.png';
+    if (document.activeElement !== nameInput) nameInput.value = manual?.displayName ?? '';
+    if (document.activeElement !== avatarInput) avatarInput.value = manual?.avatarUrl ?? '';
+
+    checkAvatarField(row);
+    const shownAvatar = manual?.avatarUrl || backend.avatarUrl;
+    const avatarBox = row.querySelector('[data-role="avatar"]');
+    avatarBox.innerHTML = shownAvatar
+      ? `<img src="${shownAvatar}" alt="" onerror="this.remove()" />`
+      : '—';
+  }
+}
+
+/**
+ * Flag an avatar URL the embed will refuse.
+ *
+ * It accepts absolute http(s) only — `data:` and `blob:` are rejected as an
+ * unbounded byte channel into the chat surface. Without this note the field just
+ * appears to do nothing: the name updates, the picture silently doesn't.
+ */
+function checkAvatarField(row) {
+  const value = row.querySelector('[data-role="avatarUrl"]').value.trim();
+  const warning = row.querySelector('[data-role="avatar-warning"]');
+  let message = '';
+  if (value) {
+    if (/^(data|blob):/i.test(value)) {
+      message = 'The embed ignores data:/blob: URLs — host the image and paste an https link.';
+    } else if (!/^https?:\/\//i.test(value)) {
+      message = 'Needs an absolute http(s) URL.';
+    }
+  }
+  warning.textContent = message;
+  warning.style.display = message ? '' : 'none';
+  warning.style.color = message ? 'var(--yellow)' : '';
+}
+
+/** Push whatever is typed in the row into the running chat. */
+function applyPerson(wallet, row) {
+  const displayName = row.querySelector('[data-role="name"]').value.trim();
+  const avatarUrl = row.querySelector('[data-role="avatarUrl"]').value.trim();
+
+  if (!displayName && !avatarUrl) {
+    // Both fields empty reads as "I no longer know this person" — same as a
+    // null push, and the chat falls back to their Cherry identity.
+    overrides.delete(wallet);
+    saveOverrides();
+    chat.setUserProfiles({ [wallet]: null });
+    log('setUserProfiles', `${short(wallet)} → null (unknown)`, 'log-warn');
+    renderPeople();
+    return;
+  }
+
+  // Empty-but-present fields are sent through as empty strings on purpose: that
+  // is how the contract spells "clear this one field" while keeping the other.
+  const profile = { displayName, avatarUrl };
+  overrides.set(wallet, profile);
+  saveOverrides();
+  chat.setUserProfiles({ [wallet]: profile });
+  log(
+    'setUserProfiles',
+    `${short(wallet)} → ${JSON.stringify(profile)}`,
+    'log-ok',
+  );
+  renderPeople();
+}
+
+/** Forget the hand-typed profile and let the backend answer again. */
+function resetPerson(wallet, row) {
+  overrides.delete(wallet);
+  saveOverrides();
+  row.querySelector('[data-role="name"]').value = '';
+  row.querySelector('[data-role="avatarUrl"]').value = '';
+  chat.invalidateUserProfiles([wallet]);
+  log('invalidateUserProfiles', short(wallet), 'log-warn');
+  renderPeople();
 }
 
 function renderRoster(rows) {
@@ -430,19 +611,13 @@ function renderRoster(rows) {
   }
 }
 
-document.getElementById('btn-rename').onclick = () => {
-  const wallet = document.getElementById('rename-wallet').value.trim();
-  const displayName = document.getElementById('rename-name').value;
-  if (!wallet) return alert('Paste a wallet address first (any sender in the chat).');
-  chat.setUserProfiles({ [wallet]: { displayName } });
-  log('setUserProfiles', `${short(wallet)} → "${displayName}"`, 'log-ok');
-};
-
-document.getElementById('btn-forget').onclick = () => {
-  const wallet = document.getElementById('rename-wallet').value.trim();
+document.getElementById('btn-add').onclick = () => {
+  const input = document.getElementById('add-wallet');
+  const wallet = input.value.trim();
   if (!wallet) return;
-  chat.invalidateUserProfiles([wallet]);
-  log('invalidateUserProfiles', short(wallet), 'log-warn');
+  seenWallets.add(wallet);
+  input.value = '';
+  renderPeople();
 };
 
 document.getElementById('btn-forget-all').onclick = () => {

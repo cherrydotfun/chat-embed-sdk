@@ -64,13 +64,21 @@ so too.
 
 ## 4. Live changes, mentions, unknown users
 
+The **Chat users** card lists every wallet the chat has asked about, one row
+each. Placeholders show what the backend answers; type over them to set a name
+or an avatar URL by hand. Edits are kept in `localStorage`, so they survive a
+reload and win inside `resolveUsers` — otherwise the next resolve would quietly
+undo them.
+
 | Try this | Expected |
 |---|---|
-| Paste a wallet in **Push a change** → `setUserProfiles()` | That sender is renamed **immediately**, everywhere in the open chat — no reload, and their avatar stays put (pushed fields are merged, not swapped in wholesale). This is the one that matters: a rename in your app is invisible otherwise, since the iframe only asks about wallets it hasn't resolved yet. |
-| **invalidate(wallet)** | The name **stays on screen** while the chat re-asks (`users.resolve` in the log) and then updates. It deliberately does not blink back to the Cherry identity in between — invalidating means "refresh this", not "forget them". To forget someone, push `null` for their wallet. |
+| Type a name in a row → **Apply** | That sender is renamed **immediately**, everywhere in the open chat — no reload, and their avatar stays put (pushed fields are merged, not swapped in wholesale). This is the one that matters: a rename in your app is invisible otherwise, since the iframe only asks about wallets it hasn't resolved yet. |
+| Paste an image URL → **Apply** | The avatar changes too. It must be an absolute `http(s)` URL — the row warns about `data:`/`blob:`, which the embed refuses. |
+| Clear one field → **Apply** | Only that field is dropped; the other survives. Clearing **both** is the same as pushing `null`: the chat falls back to the person's Cherry identity. |
+| **Reset** | Your edit is forgotten and the backend is asked again. The name **stays on screen** while that happens — invalidating means "refresh this", not "forget them". |
+| **Add** a wallet by hand | Useful for a wallet that hasn't spoken yet, so it never came through `resolveUsers`. |
 | Type `@` and a name from **Your app's directory** in the composer | The dropdown lists your users — `users.search` appears in the log. Cherry's own search only knows sol domains and wallets, so this is the difference between "@Alice finds nothing" and "@Alice finds Alice". |
-| Pick a suggestion and send | The message contains `@Alice_Rivera`. Spaces become underscores on purpose: the mention grammar stops at the first space, so an untouched name would be cut in half. The wallet rides along invisibly, so the mention still routes. |
-| Return `null` for a wallet (edit `resolveUsers` in `public/index.html`) | That person keeps their Cherry identity, and the chat stops asking about them. |
+| Pick a suggestion and send | The message contains `@Anouk_Almeida`. Spaces become underscores on purpose: the mention grammar stops at the first space, so an untouched name would be cut in half. The wallet rides along invisibly, so the mention still routes. |
 
 ## 5. Test the HTTP transport
 
