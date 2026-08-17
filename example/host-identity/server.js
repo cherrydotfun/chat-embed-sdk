@@ -199,6 +199,56 @@ identity.use(
   }),
 );
 
+// ============================================================
+// Bench state — hostile mode and hand-typed profiles.
+//
+// It lives HERE, not only in the page, because in HTTP mode the iframe never
+// asks the page: it calls /identity/resolve directly. State kept only in the
+// browser would silently do nothing as soon as a Profile endpoint is configured.
+// ============================================================
+
+/** The single hostile payload, shared with the page's bridge handler. */
+const HOSTILE_PROFILE = {
+  displayName:
+    '\u202E' +                        // right-to-left override
+    'admin\nmoderator' +              // fake second line
+    '\u200B\u200B\u200B' +            // zero-width padding
+    '\t tail ' +
+    'x'.repeat(400),                  // way past the length cap
+  avatarUrl: 'javascript:alert(1)',   // must never reach an <img>
+  isAdmin: true,                      // unknown field, must be dropped
+};
+
+const bench = { hostile: false, overrides: new Map() };
+
+/**
+ * POST /api/bench/state — the page mirrors its controls here.
+ *
+ * `hostile` toggles the probe. `overrides` is a full replacement map of
+ * hand-typed profiles (`null` for a wallet means "I don't know this person").
+ */
+app.post('/api/bench/state', (req, res) => {
+  if (typeof req.body?.hostile === 'boolean') bench.hostile = req.body.hostile;
+  if (req.body?.overrides && typeof req.body.overrides === 'object') {
+    bench.overrides = new Map(Object.entries(req.body.overrides));
+  }
+  res.json({ hostile: bench.hostile, overrides: bench.overrides.size });
+});
+
+/**
+ * What this "app" answers for a wallet, in priority order:
+ *   hostile probe  →  hand-typed profile  →  directory row  →  generated member
+ *
+ * Hostile wins over a hand-typed name on purpose: it is a diagnostic, and an
+ * edit made ten minutes ago silently swallowing it is how the probe looks
+ * broken.
+ */
+function answerFor(wallet, origin, roster) {
+  if (bench.hostile) return HOSTILE_PROFILE;
+  if (bench.overrides.has(wallet)) return bench.overrides.get(wallet);
+  return roster.get(wallet) ?? profileFor(wallet, origin);
+}
+
 /** Log every hit so the page can show what the iframe actually asked for. */
 const httpLog = [];
 function note(entry) {
@@ -218,9 +268,16 @@ identity.post('/resolve', (req, res) => {
     // falls back to the Cherry identity for that person instead of asking again.
     // Directory wallets answer with their DIRECTORY identity, so someone picked
     // from @mention autocomplete doesn't get renamed on the next resolve.
-    users[id] = roster.get(id) ?? profileFor(id, origin);
+    users[id] = answerFor(id, origin, roster);
   }
-  note({ op: 'resolve', count: ids.length, appId: req.get('X-Cherry-App-Id') || null });
+  note({
+    op: 'resolve',
+    count: ids.length,
+    // Present only when the IFRAME called us — the page's own fetch has no such
+    // header. That is what tells the two transports apart.
+    appId: req.get('X-Cherry-App-Id') || null,
+    hostile: bench.hostile,
+  });
   res.json({ users });
 });
 

@@ -116,6 +116,11 @@ Expected — the chat must show:
 Press **Back to normal** to restore. If any of the above renders raw, that is a
 bug in the embed's sanitizer — not in this page.
 
+The probe outranks hand-typed profiles: an edit made earlier must not swallow a
+diagnostic. Back to normal returns to your edits, and to the backend where there
+are none. Both buttons also mirror the mode to this backend, so the probe works
+in HTTP mode too — where the iframe never asks the page at all.
+
 ## Files
 
 | | |

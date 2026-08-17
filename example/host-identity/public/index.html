@@ -289,8 +289,27 @@ function saveOverrides() {
   try {
     localStorage.setItem(OVERRIDES_KEY, JSON.stringify(Object.fromEntries(overrides)));
   } catch { /* private mode — edits just won't survive a reload */ }
+  syncBenchState();
 }
-/** Flipped by the "Hostile profiles" button — see buildProfile(). */
+
+/**
+ * Mirror hostile mode and the hand-typed profiles to the backend.
+ *
+ * In HTTP mode the iframe never asks this page — it calls the profile endpoint
+ * directly — so controls kept only in the browser would appear to do nothing
+ * the moment a Profile endpoint is configured.
+ */
+function syncBenchState() {
+  fetch('/api/bench/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      hostile: hostileMode,
+      overrides: Object.fromEntries(overrides),
+    }),
+  }).catch(() => { /* bench backend restarted; next action re-syncs */ });
+}
+/** Flipped by the "Hostile profiles" buttons — see HOSTILE_PROFILE. */
 let hostileMode = false;
 /** When false, resolveUsers/searchUsers are not registered (METHOD_NOT_FOUND). */
 let bridgeEnabled = true;
@@ -329,19 +348,16 @@ const short = (w) => (w.length > 12 ? `${w.slice(0, 4)}…${w.slice(-4)}` : w);
  * Normally it comes from the server's directory. In hostile mode it returns
  * deliberately dangerous values, to prove the embed sanitizes what it renders.
  */
-function buildProfile(wallet, row) {
-  if (!hostileMode) return { displayName: row.displayName, avatarUrl: row.avatarUrl };
-  return {
-    displayName:
-      '\u202E' +                        // right-to-left override
-      'admin\nmoderator' +              // fake second line
-      '\u200B\u200B\u200B' +            // zero-width padding (lookalike minting)
-      '\t tail ' +
-      'x'.repeat(400),                  // way past the length cap
-    avatarUrl: 'javascript:alert(1)',   // must never reach an <img>
-    isAdmin: true,                      // unknown field, must be dropped
-  };
-}
+const HOSTILE_PROFILE = {
+  displayName:
+    '\u202E' +                        // right-to-left override
+    'admin\nmoderator' +              // fake second line
+    '\u200B\u200B\u200B' +            // zero-width padding
+    '\t tail ' +
+    'x'.repeat(400),                  // way past the length cap
+  avatarUrl: 'javascript:alert(1)',   // must never reach an <img>
+  isAdmin: true,                      // unknown field, must be dropped
+};
 
 /** POST to our own backend — the same directory the HTTP transport serves. */
 async function fetchProfiles(wallets) {
@@ -363,8 +379,16 @@ async function resolveUsers(wallets) {
   for (const wallet of wallets) {
     const row = rows[wallet];
     if (row) backendProfiles.set(wallet, { displayName: row.displayName, avatarUrl: row.avatarUrl });
-    // A hand-typed profile is the app's current truth, so it wins here too —
-    // otherwise the next resolve would quietly undo your edit.
+    // Priority: hostile probe → hand-typed profile → backend answer.
+    //
+    // Hostile FIRST on purpose. It is a diagnostic, and an edit made ten minutes
+    // ago silently swallowing it is exactly how the probe looks broken.
+    if (hostileMode) {
+      out[wallet] = HOSTILE_PROFILE;
+      continue;
+    }
+    // A hand-typed profile is the app's current truth, so it wins over the
+    // backend — otherwise the next resolve would quietly undo your edit.
     const manual = overrides.get(wallet);
     if (manual) {
       out[wallet] = manual;
@@ -372,7 +396,7 @@ async function resolveUsers(wallets) {
     }
     // A real app returns null for wallets it doesn't know; the chat then keeps
     // the Cherry identity for that person instead of asking again.
-    out[wallet] = row ? buildProfile(wallet, row) : null;
+    out[wallet] = row ? { displayName: row.displayName, avatarUrl: row.avatarUrl } : null;
   }
   log('→ answered', Object.values(out).filter(Boolean).length + ' profile(s)', 'log-ok');
   renderPeople();
@@ -467,8 +491,11 @@ async function pollHttpLog() {
       const fresh = entries.slice(lastSeen);
       lastSeen = entries.length;
       for (const e of fresh) {
-        setStatus('http', 'on', 'http endpoint: answering');
-        log('http ' + e.op, JSON.stringify({ ...e, at: undefined }), 'log-ok');
+        // `appId` is set only when the IFRAME called the endpoint. The page's own
+        // fetch (bridge mode) hits the same routes, and counting those as "http
+        // transport" made the status lie about which transport was live.
+        if (e.appId) setStatus('http', 'on', 'http endpoint: answering (iframe → endpoint)');
+        log(e.appId ? 'http ' + e.op : 'backend ' + e.op, JSON.stringify({ ...e, at: undefined, appId: undefined }), 'log-ok');
       }
     } catch { /* server restarted; keep polling */ }
   }, 2000);
@@ -628,17 +655,22 @@ document.getElementById('btn-forget-all').onclick = () => {
   log('invalidateUserProfiles', 'all', 'log-warn');
 };
 
-document.getElementById('btn-hostile').onclick = () => {
-  hostileMode = true;
+function setHostileMode(on) {
+  hostileMode = on;
+  syncBenchState();
+  document.getElementById('btn-hostile').classList.toggle('primary', on);
+  document.getElementById('btn-normal').classList.toggle('primary', !on);
+  // Re-resolve so the change lands on rows already on screen.
   chat.invalidateUserProfiles();
-  log('hostile', 'serving hostile profiles; cache dropped so they re-resolve', 'log-warn');
-};
+  log(
+    'hostile',
+    on ? 'serving hostile profiles — every wallet re-resolves' : 'back to normal profiles',
+    on ? 'log-warn' : 'log-ok',
+  );
+}
 
-document.getElementById('btn-normal').onclick = () => {
-  hostileMode = false;
-  chat.invalidateUserProfiles();
-  log('hostile', 'back to normal profiles', 'log-ok');
-};
+document.getElementById('btn-hostile').onclick = () => setHostileMode(true);
+document.getElementById('btn-normal').onclick = () => setHostileMode(false);
 
 document.getElementById('btn-clear-log').onclick = () => {
   logEl.innerHTML = '<div class="log-line">waiting…</div>';
