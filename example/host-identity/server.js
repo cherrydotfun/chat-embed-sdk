@@ -219,7 +219,19 @@ const HOSTILE_PROFILE = {
   isAdmin: true,                      // unknown field, must be dropped
 };
 
-const bench = { hostile: false, overrides: new Map() };
+/**
+ * Which answers this "app" gives:
+ *
+ *   'normal'  — hand-typed profile, else the demo directory
+ *   'unknown' — null for every wallet: the app claims to know nobody, so the
+ *               chat falls back to Cherry's own identity (a .sol domain or a
+ *               shortened address). This is the ONLY way to see that fallback
+ *               without turning the feature off in the portal — the demo
+ *               directory answers for ANY wallet, so 'normal' never yields it.
+ *   'hostile' — the sanitizer probe
+ */
+const bench = { mode: 'normal', overrides: new Map() };
+const BENCH_MODES = ['normal', 'unknown', 'hostile'];
 
 /**
  * POST /api/bench/state — the page mirrors its controls here.
@@ -228,23 +240,24 @@ const bench = { hostile: false, overrides: new Map() };
  * hand-typed profiles (`null` for a wallet means "I don't know this person").
  */
 app.post('/api/bench/state', (req, res) => {
-  if (typeof req.body?.hostile === 'boolean') bench.hostile = req.body.hostile;
+  if (BENCH_MODES.includes(req.body?.mode)) bench.mode = req.body.mode;
   if (req.body?.overrides && typeof req.body.overrides === 'object') {
     bench.overrides = new Map(Object.entries(req.body.overrides));
   }
-  res.json({ hostile: bench.hostile, overrides: bench.overrides.size });
+  res.json({ mode: bench.mode, overrides: bench.overrides.size });
 });
 
 /**
  * What this "app" answers for a wallet, in priority order:
- *   hostile probe  →  hand-typed profile  →  directory row  →  generated member
+ *   mode probe  →  hand-typed profile  →  directory row  →  generated member
  *
- * Hostile wins over a hand-typed name on purpose: it is a diagnostic, and an
+ * The mode wins over a hand-typed name on purpose: it is a diagnostic, and an
  * edit made ten minutes ago silently swallowing it is how the probe looks
  * broken.
  */
 function answerFor(wallet, origin, roster) {
-  if (bench.hostile) return HOSTILE_PROFILE;
+  if (bench.mode === 'hostile') return HOSTILE_PROFILE;
+  if (bench.mode === 'unknown') return null;
   if (bench.overrides.has(wallet)) return bench.overrides.get(wallet);
   return roster.get(wallet) ?? profileFor(wallet, origin);
 }
@@ -276,7 +289,7 @@ identity.post('/resolve', (req, res) => {
     // Present only when the IFRAME called us — the page's own fetch has no such
     // header. That is what tells the two transports apart.
     appId: req.get('X-Cherry-App-Id') || null,
-    hostile: bench.hostile,
+    mode: bench.mode,
   });
   res.json({ users });
 });

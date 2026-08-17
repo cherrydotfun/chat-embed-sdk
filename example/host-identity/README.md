@@ -97,13 +97,25 @@ shim and cannot host handlers. Note that the request carries no cookies
 if your endpoint needs auth, and allow `https://embed.cherry.fun` in its CORS
 config (this server already does).
 
-## 6. Hostile profiles
+## 6. Answer modes: seeing Cherry's own identities, and the sanitizer probe
 
-Press **Serve hostile profiles**. The page then answers with a name that carries
-a right-to-left override, an embedded newline, zero-width padding, 400
-characters of tail, an unknown `isAdmin` field, and a `javascript:` avatar URL.
+The **What this app answers** card switches what the bench replies with. The mode
+outranks hand-typed profiles — a diagnostic must not be swallowed by an edit made
+earlier — and is mirrored to the backend, so it applies in HTTP mode too.
 
-Expected — the chat must show:
+| Mode | Bench answers | Chat shows |
+|---|---|---|
+| **Normal** | your edits, else the demo directory | your app's names and avatars |
+| **I know nobody** | `null` for every wallet | **Cherry's own identity** — a `.sol` domain, or a shortened address |
+| **Hostile profiles** | one deliberately dangerous profile | a flattened, truncated name and a generated identicon |
+
+**"I know nobody" is how you see the fallback.** The demo directory answers for
+*any* wallet, so in Normal mode the Cherry identity never appears — there is
+always a host name to render. Switching to this mode is the only way to see it
+without turning the feature off in the portal. (Per-person: clear both fields in
+that user's row and press **Apply** — that pushes `null` for them alone.)
+
+For the hostile probe, the chat must show:
 
 - one line, not two (a name cannot fake a message row);
 - text in the normal reading direction (a bidi override cannot rewrite the row
@@ -113,13 +125,8 @@ Expected — the chat must show:
   impersonate an existing member);
 - the generated identicon, because `javascript:` is not an image URL.
 
-Press **Back to normal** to restore. If any of the above renders raw, that is a
-bug in the embed's sanitizer — not in this page.
-
-The probe outranks hand-typed profiles: an edit made earlier must not swallow a
-diagnostic. Back to normal returns to your edits, and to the backend where there
-are none. Both buttons also mirror the mode to this backend, so the probe works
-in HTTP mode too — where the iframe never asks the page at all.
+If any of that renders raw, it is a bug in the embed's sanitizer — not in this
+page.
 
 ## Files
 

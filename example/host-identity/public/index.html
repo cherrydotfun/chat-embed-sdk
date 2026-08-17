@@ -208,20 +208,29 @@
         </div>
       </section>
 
-      <!-- ── Sanitizer probe ────────────────────────────────────────────── -->
+      <!-- ── Answer mode ────────────────────────────────────────────────── -->
       <section class="card">
-        <div class="card-head"><span class="card-title">Hostile profiles</span></div>
+        <div class="card-head"><span class="card-title">What this app answers</span></div>
         <div class="card-body">
-          <p class="hint">
-            Answers the next resolves with names carrying newlines, zero-width padding, bidi
-            overrides, 400 characters, and a <code>javascript:</code> avatar. The chat must render
-            them flattened, trimmed and pictureless — never as a second row, a lookalike of
-            someone else, or a script URL.
-          </p>
           <div class="row">
-            <button id="btn-hostile">Serve hostile profiles</button>
-            <button id="btn-normal">Back to normal</button>
+            <button id="btn-mode-normal" class="primary">Normal</button>
+            <button id="btn-mode-unknown">I know nobody</button>
+            <button id="btn-mode-hostile">Hostile profiles</button>
           </div>
+          <p class="hint">
+            <strong>Normal</strong> — your edits, else the demo directory.<br />
+            <strong>I know nobody</strong> — answers <code>null</code> for every wallet, so the chat
+            falls back to <em>Cherry's own</em> identity: a <code>.sol</code> domain, or a shortened
+            address. The demo directory answers for any wallet, so this is the only way to see that
+            fallback without turning the feature off in the portal.<br />
+            <strong>Hostile profiles</strong> — a name with a right-to-left override, an embedded
+            newline, zero-width padding, 400 characters, and a <code>javascript:</code> avatar. The
+            chat must render it flattened, truncated and pictureless.
+          </p>
+          <p class="hint">
+            The mode outranks hand-typed profiles — a diagnostic must not be swallowed by an edit
+            you made earlier — and is mirrored to the backend, so it works in HTTP mode too.
+          </p>
         </div>
       </section>
 
@@ -304,13 +313,13 @@ function syncBenchState() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      hostile: hostileMode,
+      mode: answerMode,
       overrides: Object.fromEntries(overrides),
     }),
   }).catch(() => { /* bench backend restarted; next action re-syncs */ });
 }
-/** Flipped by the "Hostile profiles" buttons — see HOSTILE_PROFILE. */
-let hostileMode = false;
+/** 'normal' | 'unknown' | 'hostile' — see the "What this app answers" card. */
+let answerMode = 'normal';
 /** When false, resolveUsers/searchUsers are not registered (METHOD_NOT_FOUND). */
 let bridgeEnabled = true;
 
@@ -379,12 +388,17 @@ async function resolveUsers(wallets) {
   for (const wallet of wallets) {
     const row = rows[wallet];
     if (row) backendProfiles.set(wallet, { displayName: row.displayName, avatarUrl: row.avatarUrl });
-    // Priority: hostile probe → hand-typed profile → backend answer.
+    // Priority: mode probe → hand-typed profile → backend answer.
     //
-    // Hostile FIRST on purpose. It is a diagnostic, and an edit made ten minutes
-    // ago silently swallowing it is exactly how the probe looks broken.
-    if (hostileMode) {
+    // The mode goes FIRST on purpose. It is a diagnostic, and an edit made ten
+    // minutes ago silently swallowing it is exactly how the probe looks broken.
+    if (answerMode === 'hostile') {
       out[wallet] = HOSTILE_PROFILE;
+      continue;
+    }
+    if (answerMode === 'unknown') {
+      // "I don't know this wallet" — the chat keeps the person's Cherry identity.
+      out[wallet] = null;
       continue;
     }
     // A hand-typed profile is the app's current truth, so it wins over the
@@ -655,22 +669,28 @@ document.getElementById('btn-forget-all').onclick = () => {
   log('invalidateUserProfiles', 'all', 'log-warn');
 };
 
-function setHostileMode(on) {
-  hostileMode = on;
+const MODE_LABELS = {
+  normal: ['your edits, else the demo directory', 'log-ok'],
+  unknown: ['answering null for everyone — the chat shows Cherry identities', 'log-warn'],
+  hostile: ['serving hostile profiles — every wallet re-resolves', 'log-warn'],
+};
+
+function setAnswerMode(mode) {
+  answerMode = mode;
   syncBenchState();
-  document.getElementById('btn-hostile').classList.toggle('primary', on);
-  document.getElementById('btn-normal').classList.toggle('primary', !on);
-  // Re-resolve so the change lands on rows already on screen.
+  for (const m of ['normal', 'unknown', 'hostile']) {
+    document.getElementById(`btn-mode-${m}`).classList.toggle('primary', m === mode);
+  }
+  // Re-resolve so the change lands on rows already on screen. Names stay put
+  // until the fresh answer arrives, so this doesn't flicker.
   chat.invalidateUserProfiles();
-  log(
-    'hostile',
-    on ? 'serving hostile profiles — every wallet re-resolves' : 'back to normal profiles',
-    on ? 'log-warn' : 'log-ok',
-  );
+  const [text, cls] = MODE_LABELS[mode];
+  log(`mode: ${mode}`, text, cls);
 }
 
-document.getElementById('btn-hostile').onclick = () => setHostileMode(true);
-document.getElementById('btn-normal').onclick = () => setHostileMode(false);
+for (const m of ['normal', 'unknown', 'hostile']) {
+  document.getElementById(`btn-mode-${m}`).onclick = () => setAnswerMode(m);
+}
 
 document.getElementById('btn-clear-log').onclick = () => {
   logEl.innerHTML = '<div class="log-line">waiting…</div>';
