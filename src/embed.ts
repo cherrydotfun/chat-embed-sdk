@@ -290,9 +290,13 @@ export class CherryEmbed {
   }
 
   /**
-   * Forget cached profiles so the chat asks `resolveUsers` for them again.
-   * Omit `ids` to drop everything (e.g. the visitor signed into a different
+   * Mark cached profiles stale so the chat asks `resolveUsers` for them again.
+   * Omit `ids` to re-ask for everyone (e.g. the visitor signed into a different
    * account in your app).
+   *
+   * This is a refresh, not a forget: the name currently on screen stays there
+   * while the fresh answer is in flight, so a row updates once instead of
+   * blinking through the Cherry identity and back.
    */
   invalidateUserProfiles(ids?: string[]): void {
     if (ids && ids.length > 0) {

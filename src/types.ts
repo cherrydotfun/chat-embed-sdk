@@ -187,7 +187,7 @@ export interface EmbedUserProfileWithId extends EmbedUserProfile {
  * `null` (or omit it) when you don't know it — the iframe remembers that and
  * falls back to the Cherry identity instead of asking again on every render.
  *
- * Called with at most 50 wallets at a time, batched per animation frame.
+ * Called with at most 50 wallets at a time, batched over a 16 ms window.
  */
 export type ResolveUsersHandler = (
   ids: string[],

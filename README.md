@@ -138,6 +138,15 @@ This is a **visual overlay, scoped to one running chat**. Cherry stores none of
 these names, the wallet remains the author of every message, and nothing here
 changes how the person appears in the Cherry app itself.
 
+Names arrive from outside Cherry, so they are sanitized before they render:
+one line, 48 characters, zero-width and bidi characters stripped (they are how
+you mint a lookalike of an existing member). Avatars must be absolute `http(s)`
+URLs — `data:` and `blob:` are refused. Whatever doesn't survive falls back to
+the Cherry identity.
+
+Full reference: [Your users' names](https://portal.cherry.fun/docs/embed/host-identity).
+Runnable bench for both transports: [`example/host-identity/`](./example/host-identity/).
+
 ## Documentation
 
 The portal docs are the source of truth for the SDK surface:
@@ -147,6 +156,7 @@ The portal docs are the source of truth for the SDK surface:
 - [Authentication](https://portal.cherry.fun/docs/embed/authentication) — wallet-only vs. backend-signed tokens
 - [Display modes](https://portal.cherry.fun/docs/embed/display-modes) — inline, floating, collapsed
 - [Theming](https://portal.cherry.fun/docs/embed/theming) — presets and the full theme reference
+- [Your users' names](https://portal.cherry.fun/docs/embed/host-identity) — the full reference for the section above
 - [API reference](https://portal.cherry.fun/docs/embed/api-reference) — methods, events, types
 - [Guides](https://portal.cherry.fun/docs/guides/public-chat) — public chat, authenticated chat, room-per-entity
 
@@ -163,6 +173,7 @@ Full guide: [`docs/react-native.md`](./docs/react-native.md). Runnable code (hos
 - [`example/app-trusted/`](./example/app-trusted/) — Express token server only, zero signature, no wallet. `authMode: app-trusted` is self-serve: pick it in your embed's auth mode at portal.cherry.fun.
 - [`example/react-native/`](./example/react-native/) — React Native WebView integration with native wallet signing
 - [`example/flutter/`](./example/flutter/) — Flutter WebView integration (MWA + Phantom deeplink)
+- [`example/host-identity/`](./example/host-identity/) — test bench for your own names and avatars: both transports, hand-edited profiles, and a sanitizer probe
 
 ## Development
 
