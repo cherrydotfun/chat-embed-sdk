@@ -267,8 +267,11 @@ export class CherryEmbed {
    * resolved yet.
    *
    * A pushed profile outranks anything resolved through `resolveUsers` and
-   * never expires. Pass `null` for a wallet to say "I don't know this one" —
-   * the chat falls back to its Cherry identity.
+   * never expires. Fields are MERGED onto what the chat already knows, so
+   * `{ displayName }` renames someone without disturbing their avatar; include
+   * a field with an empty value to clear it. Pass `null` for the whole wallet
+   * to say "I don't know this one" — the chat falls back to its Cherry
+   * identity.
    *
    * Requires "Who your users appear as" to be enabled for this embed in the
    * portal; otherwise the iframe ignores it.

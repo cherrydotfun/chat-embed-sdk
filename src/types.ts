@@ -159,6 +159,10 @@ export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
  * Both fields are optional and independent — supply a name only, an avatar
  * only, or both. Anything you leave out falls back to the Cherry identity.
  *
+ * When PUSHED with `setUserProfiles`, fields are merged onto whatever the chat
+ * already knows for that wallet: sending only `displayName` renames the person
+ * and keeps their avatar. Include a field with an empty value to clear it.
+ *
  * This is a VISUAL overlay inside one running embed: Cherry stores none of it,
  * the wallet remains the author of every message, and the Cherry app is
  * unaffected. Enable it per embed at portal.cherry.fun ("Who your users appear

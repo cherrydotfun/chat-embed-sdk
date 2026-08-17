@@ -16,7 +16,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
     wallets per call), `searchUsers` (@mention autocomplete over your
     directory), `getUser` (reserved for the profile view).
   - Methods: `setUserProfiles(users)` to push names/avatars into a running chat
-    (a rename is invisible otherwise), `invalidateUserProfiles(ids?)` to drop
+    (a rename is invisible otherwise; fields are merged, so pushing a name
+    alone keeps the avatar), `invalidateUserProfiles(ids?)` to drop
     cached ones, `setIdentityToken(token)` for the profile endpoint's
     `Authorization` header (memory only, never persisted).
   - Config fields: `userProfiles` (known at mount, no round-trip on first

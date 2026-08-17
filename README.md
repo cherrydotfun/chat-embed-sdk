@@ -126,9 +126,13 @@ WebViews, where the host page is a thin shim. Your endpoint needs CORS for
 Push changes as they happen — an open chat won't notice a rename otherwise:
 
 ```ts
-chat.setUserProfiles({ [wallet]: { displayName: 'New name', avatarUrl } });
+chat.setUserProfiles({ [wallet]: { displayName: 'New name' } });  // avatar kept
 chat.invalidateUserProfiles([wallet]);   // or invalidateUserProfiles() for all
 ```
+
+Pushed fields are merged onto what the chat already knows, so a rename doesn't
+disturb the avatar. Include a field with an empty value to clear it, or push
+`null` for the wallet to say you no longer know that person.
 
 This is a **visual overlay, scoped to one running chat**. Cherry stores none of
 these names, the wallet remains the author of every message, and nothing here
