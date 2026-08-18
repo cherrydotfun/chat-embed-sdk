@@ -99,6 +99,26 @@ In `'count'` mode the number is always the unread-message tally and `@` is a bar
 
 It follows the `unreadState` event on its own — no wiring needed — hides itself at zero, and clears whenever the viewer changes: on sign-out, on `signOut()`, and on a `setToken()` / `setWalletAddress()` that switches accounts. The badge is ringed in white so it stays legible over a busy icon; set `--cherry-bubble-badge-ring` to your page background to match a dark page.
 
+## Transparency and blur
+
+A see-through widget is one theme field away: give `theme.backgroundColor` an alpha colour (`'rgba(10, 10, 15, 0.6)'`, `'transparent'`, `'#0a0a0f99'`) and the host page shows through the chat area. Add `backgroundBlur` (px, 0–40) to frost the page behind the whole widget — the SDK applies that blur to the iframe element itself, because a cross-origin iframe cannot sample your page from inside. `headerBlur` / `inputBlur` frost the transcript behind a semi-transparent header or composer *inside* the iframe and pair with an alpha `headerColor` / `inputColor`.
+
+```ts
+const chat = new CherryEmbed({
+  appId: 'YOUR_EMBED_ID',
+  roomId: 'YOUR_ROOM_ID',
+  theme: {
+    mode: 'dark',
+    backgroundColor: 'rgba(10, 10, 15, 0.55)',
+    backgroundBlur: 12,
+    headerColor: 'rgba(255, 255, 255, 0.06)',
+    headerBlur: 8,
+  },
+});
+```
+
+An opaque `backgroundColor` (or none — the mode default, `#0a0a0f` dark / `#ffffff` light) is painted on the iframe element too, so the widget never flashes the host page through on mount or reload; a gradient background counts as opaque and sits on the mode default. Everything above restyles live on `setTheme()` / `resetTheme()`. The [live demo](https://cherry.fun/chat-embed-example/) has a *Surfaces* panel with all of these controls.
+
 ## Authenticating your own users
 
 If you run a backend and want chat identity tied to your users, use **app-trusted + wallet** auth: your backend signs a short-lived `embedToken` (HMAC, using the app secret from your embed's settings), and the user confirms wallet ownership with one signature. See [Authentication](https://portal.cherry.fun/docs/embed/authentication) for the full flow, and [`example/app-trusted+wallet/`](./example/app-trusted%2Bwallet/) for a complete runnable token server.
@@ -141,12 +161,12 @@ Prefer pulling over subscribing? The SDK keeps the latest snapshot:
 
 ```ts
 chat.getUnreadState();        // UnreadState | null — null until the first event
-chat.getUnreadCount();        // unread messages across every reported room
-chat.getUnreadCount(roomId);  // unread messages in one room
+chat.getUnreadCount();        // unread messages in the rendered room (= total.unread)
+chat.getUnreadCount(roomId);  // the same number for that room, 0 for any other id
 chat.refreshUnreadState();    // ask the iframe to re-emit unreadState
 ```
 
-Both getters are synchronous cache reads, so poll them as often as your UI repaints. `refreshUnreadState()` is different: it crosses the bridge and answers asynchronously through the `unreadState` event, so keep it to a coarse interval (seconds, not frames) — the iframe already pushes on every change, and subscribing beats polling.
+Both getters are synchronous cache reads, so poll them as often as your UI repaints. `refreshUnreadState()` is different: it crosses the bridge and answers asynchronously through the `unreadState` event, so keep it to a coarse interval (seconds, not frames) — the iframe already pushes on every change, and subscribing beats polling. Called before the iframe is ready (or before sign-in) it is a no-op: nothing is emitted, and the first snapshot arrives on its own once the session loads.
 
 Counters only accrue while the chat isn't being read: hidden through `hide()`, mounted `collapsed`, or scrolled up into history. The SDK reports visibility to the iframe on `show()` / `hide()` / `toggle()` and right after mount, so a widget you hide with your own CSS instead of `hide()` still counts as open and keeps marking messages read. Nothing is emitted before sign-in — a preview-mode visitor has no unread state — nor after `chat.signOut()`, which drops the cached snapshot back to `null` for exactly that reason. Account switches drop it as well: `setToken()` and a `setWalletAddress()` with a different wallet reset the cache to `null`, so the previous user's counts never linger on your indicator while the new session loads.
 

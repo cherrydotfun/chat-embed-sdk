@@ -125,6 +125,26 @@ describe('applyIframeBackground — opaque background', () => {
 
     expect(iframe.style.backgroundColor).toBe(normalized('#123456'));
   });
+
+  it('grounds a gradient background on the mode default (a gradient is not a <color>)', () => {
+    // `background-color` rejects gradients: without the fallback the element
+    // would end up with NO ground (or keep the previous theme's colour).
+    const grad = 'linear-gradient(135deg, #ff1493 0%, #c026d3 100%)';
+    const dark = createIframe();
+    applyIframeBackground(dark, grad, 'dark');
+    expect(dark.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+    expect(dark.style.colorScheme).toBe('normal');
+
+    const light = createIframe();
+    applyIframeBackground(light, grad, 'light');
+    expect(light.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND_LIGHT));
+
+    // ...and never a stale colour: an earlier solid ground is replaced.
+    const stale = createIframe();
+    applyIframeBackground(stale, '#123456');
+    applyIframeBackground(stale, 'radial-gradient(circle, #000 0%, #fff 100%)', 'dark');
+    expect(stale.style.backgroundColor).toBe(normalized(DEFAULT_BACKGROUND));
+  });
 });
 
 // ---------------------------------------------------------------------------

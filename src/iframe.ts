@@ -112,6 +112,12 @@ export function isOpaqueColor(value: string): boolean {
 // resets background-color and would silently undo this.
 // With no theme background the ground follows `mode`, like the engine's own
 // fallback — a light theme must not pre-paint near-black.
+/** `linear-gradient(...)` / `radial-gradient(...)` / `conic-gradient(...)` and
+ *  their `repeating-` forms — the only non-<color> values the theme accepts. */
+function isGradient(value: string): boolean {
+  return /^\s*(?:repeating-)?(?:linear|radial|conic)-gradient\(/i.test(value);
+}
+
 export function applyIframeBackground(
   iframe: HTMLIFrameElement,
   backgroundColor: string | undefined,
@@ -124,7 +130,16 @@ export function applyIframeBackground(
     return;
   }
   const opaque = isOpaqueColor(backgroundColor);
-  iframe.style.backgroundColor = opaque ? backgroundColor : '';
+  // A gradient is opaque (the engine paints it as such) but is not a <color>:
+  // `background-color` rejects it, which would leave the element with NO
+  // ground — or, worse, a stale one from the previous theme. The engine's own
+  // canvas for the mode is the honest ground under a gradient fill.
+  const ground = opaque
+    ? isGradient(backgroundColor)
+      ? mode === 'light' ? DEFAULT_BACKGROUND_LIGHT : DEFAULT_BACKGROUND_DARK
+      : backgroundColor
+    : '';
+  iframe.style.backgroundColor = ground;
   // The element's color-scheme must MATCH the embed document's for a see-through
   // widget: the document declares `color-scheme: dark`, and Chromium paints an
   // OPAQUE frame canvas whenever the two disagree — so the host page never shows
