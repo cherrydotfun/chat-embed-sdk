@@ -136,7 +136,7 @@ String buildCherryHostHtml({
         },
       });
 
-      var events = ['ready', 'authStateChange', 'unreadCount', 'message', 'tokenExpired', 'error', 'walletConnectRequested', 'preview', 'roomChanged'];
+      var events = ['ready', 'authStateChange', 'unreadCount', 'unreadState', 'message', 'tokenExpired', 'error', 'walletConnectRequested', 'preview', 'roomChanged'];
       events.forEach(function (ev) {
         chat.on(ev, function (data) { toNative({ type: 'event', event: ev, data: data }); });
       });

@@ -203,6 +203,13 @@ export class EmbedBridge {
       return;
     }
 
+    // Origin alone is not enough: another embed instance or a popup on the
+    // same origin would pass it. Real cross-window senders always carry a
+    // source; null only occurs for synthetic same-context events.
+    if (event.source !== null && event.source !== this.iframe.contentWindow) {
+      return;
+    }
+
     let data: unknown = event.data;
 
     // Some environments serialize messages as strings

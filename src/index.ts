@@ -1,10 +1,13 @@
 export { CherryEmbed } from './embed';
 export type {
   CherryEmbedConfig,
+  ChatBubbleBadgeMode,
   EmbedMode,
   EmbedTheme,
   EmbedLayout,
   EmbedEventMap,
+  UnreadState,
+  UnreadRoomState,
   SignChallengeHandler,
   BridgeMessage,
   BridgeCommand,

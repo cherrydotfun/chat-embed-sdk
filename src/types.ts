@@ -169,6 +169,36 @@ export interface EmbedLayout {
 
 export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
 
+/** Unread counters for one room, as seen by the signed-in viewer. */
+export interface UnreadRoomState {
+  roomId: string;
+  /** Unread messages in the room. */
+  unread: number;
+  /**
+   * Unread "someone addressed you" signals: @-mentions, replies to the
+   * viewer's messages, AND reactions on them — the same signal that drives the
+   * in-chat "@" badge. A bare emoji reaction therefore lights up a host dot
+   * bound to this number.
+   */
+  mentions: number;
+}
+
+/**
+ * Snapshot of the viewer's unread state, delivered by the `unreadState` event
+ * and cached by `getUnreadState()`.
+ */
+export interface UnreadState {
+  /**
+   * Counters for the room this embed renders — never the viewer's other chats.
+   * 0 or 1 entries today: emission is held until the room join resolves, so
+   * this is empty only when there is no roomId to join or the join failed.
+   * The array is future-proof for list mode.
+   */
+  rooms: UnreadRoomState[];
+  /** Sums across `rooms`. */
+  total: { unread: number; mentions: number };
+}
+
 /**
  * Embed display mode.
  *
@@ -186,6 +216,17 @@ export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
  * runtime ships those modes.
  */
 export type EmbedMode = 'single' | 'external-controlled' | 'list';
+
+/**
+ * How the `chatBubble` launcher renders unread state.
+ *
+ * - `'dot'` (default) — a bare pink dot while messages are unread, upgraded to
+ *   a single `@` pill once something addressed the viewer. No numbers.
+ * - `'count'` — a counter pill: the unread number, `@ N` while mentions are
+ *   outstanding, capped at `99+`.
+ * - `'off'` — no badge at all.
+ */
+export type ChatBubbleBadgeMode = 'dot' | 'count' | 'off';
 
 export interface CherryEmbedConfig {
   appId: string;
@@ -210,6 +251,32 @@ export interface CherryEmbedConfig {
   layout?: EmbedLayout;
   position?: 'inline' | 'floating-right' | 'floating-left';
   collapsed?: boolean;
+  /**
+   * Render the SDK's own floating launcher button beside the widget.
+   * Defaults to `false` — the host then renders its own launcher and drives
+   * `show()` / `hide()` / `toggle()` itself.
+   *
+   * Only meaningful with `position: 'floating-right' | 'floating-left'`;
+   * silently ignored for inline embeds. Pair with `collapsed: true` (the
+   * recommended combo) so the widget starts closed behind the launcher.
+   *
+   * While enabled the SDK owns the stacking order: the button sits on top and
+   * the panel drops one z-index below it. Labels are English-only (the SDK has
+   * no i18n) — hosts needing localised labels should leave this off. Removed by
+   * `destroy()`; a `mount()` that rejects on the ready timeout leaves the button
+   * in place for the host to tear down.
+   */
+  chatBubble?: boolean;
+  /**
+   * How the `chatBubble` launcher shows unread state. Defaults to `'dot'` —
+   * the badge is on as soon as `chatBubble` is, showing a bare dot for unread
+   * messages and a single `@` pill for mentions. Use `'count'` for numbers
+   * (`N`, `@ N`, capped at `99+`) or `'off'` for no badge.
+   *
+   * Ignored without `chatBubble`. The badge follows the `unreadState` event on
+   * its own and clears on any viewer change; nothing to wire up.
+   */
+  chatBubbleBadge?: ChatBubbleBadgeMode;
   embedUrl?: string;
   /**
    * Optional wallet signing callback registered during mount before initial
@@ -221,6 +288,21 @@ export interface CherryEmbedConfig {
 export type EmbedEventMap = {
   ready: void;
   unreadCount: number;
+  /**
+   * Unread + mention counters for the room this embed renders. Emitted once
+   * after the session loads, on every counter change, and on demand via
+   * `refreshUnreadState()`. Never emitted in preview mode — an anonymous
+   * visitor has nothing to catch up on.
+   *
+   * Counters only grow while the widget is hidden (`hide()` / `collapsed`) or
+   * while the user is reading older messages; a visible chat settled at the
+   * tail marks everything read, which is what zeroes `unread` — reopening
+   * behind the frozen "Unread messages" divider defers that until the viewport
+   * reaches the bottom. `mentions` counts @-mentions, replies to the viewer and
+   * reactions on the viewer's messages; it clears on its own boundary (the
+   * in-chat "@" badge), so it outlives the reopen.
+   */
+  unreadState: UnreadState;
   message: { roomId: string; senderId: string; timestamp: number };
   authStateChange: boolean;
   /**
