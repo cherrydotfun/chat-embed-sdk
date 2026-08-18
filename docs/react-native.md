@@ -68,7 +68,7 @@ Host page → native (via `window.ReactNativeWebView.postMessage`, JSON):
 |---|---|
 | `{ type: 'ready' }` | Page loaded; ready for config. Native replies with `__cherryReceiveConfig`. |
 | `{ type: 'sign', id, message }` | `signChallenge` fired. `message` is base64 challenge bytes. Native signs and replies with `__cherrySignResult`. |
-| `{ type: 'event', event, data }` | Forwarded SDK event (`ready`, `mounted`, `authStateChange`, `unreadCount`, `message`, `tokenExpired`, `error`, `walletConnectRequested`, `preview`, `roomChanged`). |
+| `{ type: 'event', event, data }` | Forwarded SDK event (`ready`, `mounted`, `authStateChange`, `unreadCount`, `unreadState`, `message`, `tokenExpired`, `error`, `walletConnectRequested`, `preview`, `roomChanged`). |
 
 `CherryChatWebView.tsx` implements this whole protocol; `host.html` /
 `cherryHostHtml.ts` implement the page side.

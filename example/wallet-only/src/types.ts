@@ -70,6 +70,20 @@ export interface EmbedTheme {
 
   fontFamily?: string;
   fontSize?: 'sm' | 'md' | 'lg';
+
+  /**
+   * Backdrop-blur radii in px (number or numeric string), clamped 0–40 by the
+   * embed. They are the companion to a see-through surface: a blur has nothing
+   * to sample through an opaque one.
+   *
+   * `headerBlur` / `inputBlur` frost the transcript INSIDE the iframe.
+   * `backgroundBlur` is applied HOST-side by the SDK to the iframe element
+   * itself — a cross-origin iframe cannot frost the page it sits on from the
+   * inside — so it frosts the host page behind a see-through widget.
+   */
+  headerBlur?: number | string;
+  inputBlur?: number | string;
+  backgroundBlur?: number | string;
 }
 
 /**

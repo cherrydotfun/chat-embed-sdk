@@ -57,7 +57,7 @@ bun add @cherrydotfun/chat-embed-sdk
 For plain HTML without bundling, load the package from npm via jsDelivr. The bundle exposes `window.CherryEmbedSDK`:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.2.0/dist/index.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.7/dist/index.global.js"></script>
 <script>
   const chat = new window.CherryEmbedSDK.CherryEmbed({ /* config */ });
   chat.mount();
@@ -178,7 +178,7 @@ const chat = new CherryEmbed({
 
 Only the layout keys above are honored by the embed runtime. The full theme reference lives at https://portal.cherry.fun/docs/embed/theming.
 
-For a floating launcher instead of an inline panel, omit `container` and set `position: 'floating-right'` (or `'floating-left'`), optionally with `collapsed: true`.
+For a floating launcher instead of an inline panel, omit `container` and set `position: 'floating-right'` (or `'floating-left'`), optionally with `collapsed: true`. Add `chatBubble: true` for the built-in launcher button (off by default; floating positions only): it toggles the widget, carries the unread badge on its own — `chatBubbleBadge: 'dot' | 'count' | 'off'`, `'dot'` by default — and takes its colours from the theme. Without `chatBubble`, wire the host's own control from `unreadState` + `chat.show()`.
 
 Keep the container dimensions stable for inline embeds:
 
@@ -192,6 +192,17 @@ Keep the container dimensions stable for inline embeds:
 chat.on('ready', () => {});
 chat.on('authStateChange', (authenticated) => {});
 chat.on('unreadCount', (count) => {});
+chat.on('unreadState', ({ rooms, total }) => {
+  // { roomId, unread, mentions } for the embed's room + totals, for a
+  // host-rendered unread dot. rooms holds 0 or 1 entries (empty until the room
+  // join resolves) — read total or rooms[0]?.unread. mentions counts
+  // @-mentions, replies AND reactions on the viewer's messages. Counters only
+  // accrue while the widget is hidden via chat.hide() / collapsed — hiding it
+  // with your own CSS keeps messages marked read. Reopening at the bottom
+  // zeroes unread; mentions clear on the in-chat "@" badge, so they survive
+  // the reopen. Nothing is emitted signed-out: clear your dot on
+  // authStateChange(false).
+});
 chat.on('message', ({ roomId, senderId, timestamp }) => {});
 chat.on('preview', ({ visible, gated }) => {});
 chat.on('walletConnectRequested', () => {

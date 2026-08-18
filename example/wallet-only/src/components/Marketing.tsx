@@ -18,14 +18,40 @@ const SNIPPET_SEEDS: (keyof EmbedTheme)[] = [
   'incomingBubbleColor',
 ];
 
-function buildSnippet(theme: Partial<EmbedTheme>, layout: EmbedLayout): string {
+/**
+ * Surface colours worth showing next to the seeds: they are what a host passes
+ * to take a ground see-through, so they belong in the copy-paste snippet even
+ * though the rest of the granular palette does not.
+ */
+const SNIPPET_SURFACES: (keyof EmbedTheme)[] = ['headerColor', 'inputColor'];
+
+/** Numeric (px) keys — emitted bare, no quotes. */
+const SNIPPET_BLURS: (keyof EmbedTheme)[] = ['backgroundBlur', 'headerBlur', 'inputBlur'];
+
+/** Entry count past which the theme object reads better broken over lines. */
+const THEME_INLINE_MAX = 4;
+
+function buildSnippet(
+  theme: Partial<EmbedTheme>,
+  layout: EmbedLayout,
+): { code: string; shown: number; total: number } {
   const themeEntries: string[] = [];
-  for (const k of SNIPPET_SEEDS) {
+  for (const k of [...SNIPPET_SEEDS, ...SNIPPET_SURFACES]) {
     const v = theme[k];
     if (typeof v === 'string' && v) themeEntries.push(`${k}: '${v}'`);
   }
   if (theme.gradients === 'on') themeEntries.push(`gradients: 'on'`);
-  const themeInline = themeEntries.length ? `{ ${themeEntries.join(', ')} }` : `{ mode: 'dark' }`;
+  for (const k of SNIPPET_BLURS) {
+    const v = theme[k];
+    // Only real, non-zero amounts — a 0 blur is the same as not passing one.
+    const n = typeof v === 'number' ? v : typeof v === 'string' && v ? Number(v) : NaN;
+    if (Number.isFinite(n) && n > 0) themeEntries.push(`${k}: ${Math.round(n)}`);
+  }
+  const themeInline = !themeEntries.length
+    ? `{ mode: 'dark' }`
+    : themeEntries.length <= THEME_INLINE_MAX
+      ? `{ ${themeEntries.join(', ')} }`
+      : `{\n      ${themeEntries.join(',\n      ')},\n    }`;
 
   const layoutEntries: string[] = [];
   if (layout.showHeader === false) layoutEntries.push('showHeader: false');
@@ -35,7 +61,12 @@ function buildSnippet(theme: Partial<EmbedTheme>, layout: EmbedLayout): string {
   if (ht) layoutEntries.push(`headerTitle: '${ht.replace(/'/g, "\\'")}'`);
   const layoutLine = layoutEntries.length ? `\n    layout: { ${layoutEntries.join(', ')} },` : '';
 
-  return `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.2.0/dist/index.global.js"></script>
+  const total = (Object.keys(theme) as (keyof EmbedTheme)[]).filter((k) => {
+    const v = theme[k];
+    return v !== undefined && v !== '';
+  }).length;
+
+  const code = `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.7/dist/index.global.js"></script>
 <div id="cherry-chat" style="height: 600px"></div>
 <script>
   new window.CherryEmbedSDK.CherryEmbed({
@@ -45,6 +76,8 @@ function buildSnippet(theme: Partial<EmbedTheme>, layout: EmbedLayout): string {
     theme: ${themeInline},${layoutLine}
   }).mount();
 </script>`;
+
+  return { code, shown: themeEntries.length, total };
 }
 
 /**
@@ -53,6 +86,11 @@ function buildSnippet(theme: Partial<EmbedTheme>, layout: EmbedLayout): string {
  * the integration snippet reflects the current seeds and non-default layout.
  */
 export function Marketing({ theme, layout }: MarketingProps) {
+  const { code, shown, total } = buildSnippet(theme, layout);
+  // The snippet is the SEED-shaped integration a host would really write; a
+  // preset additionally pins granular slots. Say so out loud rather than let the
+  // snippet read as "everything the preview is running on".
+  const hidden = Math.max(0, total - shown);
   return (
     <section className="marketing">
       <div className="marketing-eyebrow">
@@ -84,10 +122,18 @@ export function Marketing({ theme, layout }: MarketingProps) {
       <details className="snippet">
         <summary>Integration snippet</summary>
         <pre>
-          <code>{buildSnippet(theme, layout)}</code>
+          <code>{code}</code>
         </pre>
         <p className="snippet-foot">
-          Reflects the current seeds &amp; layout. Full SDK reference &amp; types on{' '}
+          Reflects the current seeds, surfaces &amp; layout.{' '}
+          {hidden > 0 && (
+            <>
+              The live preview is sending <b>{hidden}</b> further key{hidden === 1 ? '' : 's'} the
+              snippet leaves out (granular palette + typography) — <b>Copy theme</b> in the editor
+              gives the exact object.{' '}
+            </>
+          )}
+          Full SDK reference &amp; types on{' '}
           <a
             className="snippet-link"
             href="https://github.com/cherrydotfun/chat-embed-sdk"

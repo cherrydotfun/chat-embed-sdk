@@ -39,6 +39,13 @@ function dispatchMessage(origin: string, data: unknown): void {
   window.dispatchEvent(event);
 }
 
+/** Like dispatchMessage but with an explicit event.source. Built via
+ *  Object.assign because the MessageEvent init rejects plain fakes. */
+function dispatchMessageFrom(source: unknown, origin: string, data: unknown): void {
+  const event = Object.assign(new Event('message'), { data, origin, source });
+  window.dispatchEvent(event as MessageEvent);
+}
+
 /** Dispatch a cherry:request from the embed origin. */
 function dispatchRequest(req: Omit<BridgeRequest, 'type'>): void {
   dispatchMessage(EMBED_ORIGIN, { type: 'cherry:request', ...req });
@@ -69,10 +76,12 @@ describe('base64ToBytes / bytesToBase64', () => {
 describe('EmbedBridge — incoming request routing', () => {
   let bridge: EmbedBridge;
   let posted: { message: unknown; targetOrigin: string }[];
+  let iframe: HTMLIFrameElement;
 
   beforeEach(() => {
     const fake = createFakeIframe();
     posted = fake.posted;
+    iframe = fake.iframe;
     bridge = new EmbedBridge(fake.iframe, EMBED_ORIGIN);
   });
 
@@ -158,6 +167,40 @@ describe('EmbedBridge — incoming request routing', () => {
 
     expect(handler).not.toHaveBeenCalled();
     expect(posted).toHaveLength(0);
+  });
+
+  it('ignores messages whose source is a different window', async () => {
+    const handler = vi.fn().mockResolvedValue({});
+    bridge.onIncomingRequest('signChallenge', handler);
+
+    // Right origin, but sent by some other window (e.g. a second embed)
+    dispatchMessageFrom({ postMessage() {} }, EMBED_ORIGIN, {
+      type: 'cherry:request',
+      id: 'req-foreign',
+      method: 'signChallenge',
+      params: { message: 'aGVsbG8=' },
+    });
+
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(posted).toHaveLength(0);
+  });
+
+  it('accepts messages whose source is the iframe contentWindow', async () => {
+    bridge.onIncomingRequest('signChallenge', async () => ({ signature: 'sig' }));
+
+    dispatchMessageFrom(iframe.contentWindow, EMBED_ORIGIN, {
+      type: 'cherry:request',
+      id: 'req-own-window',
+      method: 'signChallenge',
+      params: { message: 'aGVsbG8=' },
+    });
+
+    await vi.waitFor(() => posted.length > 0);
+    const resp = posted[0]!.message as BridgeResponse;
+    expect(resp.id).toBe('req-own-window');
+    expect(resp.error).toBeUndefined();
   });
 
   it('sends response to iframe with the embed origin as targetOrigin', async () => {

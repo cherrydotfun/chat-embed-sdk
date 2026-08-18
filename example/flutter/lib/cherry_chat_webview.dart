@@ -160,7 +160,7 @@ class CherryChatWebView extends StatefulWidget {
   final CherryChatController? controller;
 
   /// Forwarded SDK events: 'ready' | 'mounted' | 'authStateChange' |
-  /// 'unreadCount' | 'message' | 'tokenExpired' | 'error' |
+  /// 'unreadCount' | 'unreadState' | 'message' | 'tokenExpired' | 'error' |
   /// 'walletConnectRequested' | 'preview' | 'roomChanged'.
   final void Function(String event, dynamic data)? onEvent;
 

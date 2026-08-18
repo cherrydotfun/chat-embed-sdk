@@ -74,7 +74,7 @@ export interface CherryChatWebViewProps {
   onSign: (message: Uint8Array) => Promise<Uint8Array>;
   /**
    * Forwarded SDK events: 'ready' | 'mounted' | 'authStateChange' |
-   * 'unreadCount' | 'message' | 'tokenExpired' | 'error' |
+   * 'unreadCount' | 'unreadState' | 'message' | 'tokenExpired' | 'error' |
    * 'walletConnectRequested' | 'preview' | 'roomChanged'.
    */
   onEvent?: (event: string, data: unknown) => void;
