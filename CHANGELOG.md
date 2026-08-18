@@ -3,7 +3,7 @@
 All notable changes to `@cherrydotfun/chat-embed-sdk` are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## 0.2.0
+## 0.1.7
 
 ### Added
 
@@ -32,9 +32,6 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   portal.cherry.fun. Alternatively, configure a profile endpoint there and the
   widget calls your backend directly — no host-page handlers needed. Registering
   nothing keeps the previous behaviour exactly.
-## 0.1.7
-
-### Added
 
 - `chatBubble: true` — a built-in round launcher for `floating-right` /
   `floating-left`. Toggles the widget on click, follows `show()` / `hide()` /
