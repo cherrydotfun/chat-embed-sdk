@@ -177,7 +177,7 @@ const chat = new CherryEmbed({
 
 Only the layout keys above are honored by the embed runtime. The full theme reference lives at https://portal.cherry.fun/docs/embed/theming.
 
-For a floating launcher instead of an inline panel, omit `container` and set `position: 'floating-right'` (or `'floating-left'`), optionally with `collapsed: true`. There is no built-in launcher button: wire the host's own control from `unreadState` + `chat.show()`.
+For a floating launcher instead of an inline panel, omit `container` and set `position: 'floating-right'` (or `'floating-left'`), optionally with `collapsed: true`. Add `chatBubble: true` for the built-in launcher button (off by default; floating positions only): it toggles the widget, carries the unread badge on its own — `chatBubbleBadge: 'dot' | 'count' | 'off'`, `'dot'` by default — and takes its colours from the theme. Without `chatBubble`, wire the host's own control from `unreadState` + `chat.show()`.
 
 Keep the container dimensions stable for inline embeds:
 

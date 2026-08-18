@@ -3,9 +3,17 @@
 All notable changes to `@cherrydotfun/chat-embed-sdk` are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.7
 
 ### Added
+
+- `chatBubble: true` — a built-in round launcher for `floating-right` /
+  `floating-left`. Toggles the widget on click, follows `show()` / `hide()` /
+  `toggle()`, takes its colours from the theme (and the engine's resolved
+  colours once the iframe reports them via `themeApplied`), and carries the
+  unread badge on its own — `chatBubbleBadge: 'dot' | 'count' | 'off'`,
+  `'dot'` by default. Off by default and ignored for inline embeds; `destroy()`
+  removes it. Pair with `collapsed: true` to start closed.
 
 - `unreadState` event — `rooms: [{ roomId, unread, mentions }]` plus totals, so
   hosts can render their own unread dot (`mentions` counts @-mentions, replies
@@ -22,6 +30,19 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   on `authStateChange(false)`. `setToken()` and a `setWalletAddress()` that
   changes wallet clear it too: those counts belong to the previous viewer until
   the new session emits its first snapshot.
+
+### Fixed
+
+- The iframe element is painted with the theme background (or the mode
+  default — `#0a0a0f` dark / `#ffffff` light) so the host page never flashes
+  through on mount or reload. Alpha / `transparent` backgrounds stay see-through
+  and the element's `color-scheme` is set to match the embed document, so
+  Chromium no longer paints an opaque canvas under a see-through widget on
+  light host pages — `backgroundBlur` has something to frost again. A gradient
+  `backgroundColor` is grounded on the mode default instead of leaving no
+  ground (or the previous theme's colour) under it.
+- The host bridge accepts `cherry:*` messages only from its own iframe
+  window, not from any window on the embed origin.
 
 ### Changed
 
