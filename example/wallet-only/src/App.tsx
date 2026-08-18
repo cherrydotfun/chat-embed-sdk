@@ -22,6 +22,12 @@ const KEEP_ON_CLEAR: (keyof EmbedTheme)[] = [
   'incomingBubbleColor',
   'fontFamily',
   'fontSize',
+  // Blur is not a palette value — the engine cannot derive it — so it survives
+  // alongside the surface it frosts. The widget ground is a seed and stays, so
+  // its blur stays too; the header/composer blurs go with their (cleared)
+  // granular colours, since a frost over a re-derived opaque surface is dead
+  // weight in the payload.
+  'backgroundBlur',
 ];
 
 /** Cap on the undo/redo stack so a long colour-picker drag can't blow up memory. */

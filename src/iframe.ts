@@ -1,3 +1,5 @@
+import type { EmbedTheme } from './types';
+
 const DEFAULT_EMBED_URL = 'https://embed.cherry.fun';
 
 // The embed's own canvases, used when no theme sets a background. Must track the
@@ -12,10 +14,8 @@ export function createEmbedIframe(config: {
   embedUrl?: string;
   container: HTMLElement;
   position: 'inline' | 'floating-right' | 'floating-left';
-  /** Theme background, painted on the element itself — see applyIframeBackground. */
-  backgroundColor?: string;
-  /** Theme mode — NOT the embed `mode` above. Picks the default ground. */
-  themeMode?: 'dark' | 'light';
+  /** The host theme — its element-side half is painted here, see applyIframeSurface. */
+  theme?: EmbedTheme;
 }): HTMLIFrameElement {
   const iframe = document.createElement('iframe');
 
@@ -37,8 +37,7 @@ export function createEmbedIframe(config: {
   iframe.style.border = 'none';
   iframe.style.width = '100%';
   iframe.style.height = '100%';
-  iframe.style.colorScheme = 'normal';
-  applyIframeBackground(iframe, config.backgroundColor, config.themeMode);
+  applyIframeSurface(iframe, config.theme);
 
   if (config.position === 'inline') {
     iframe.style.display = 'block';
@@ -100,7 +99,10 @@ export function isOpaqueColor(value: string): boolean {
 
 // Ground the iframe ELEMENT: between documents (mount, reload, remount) the
 // embed has nothing painted yet and the host page would show straight through.
-// Skipped for see-through theme backgrounds — that transparency is intentional.
+// A see-through theme background CLEARS the ground instead — an iframe element
+// with no background-color of its own is already transparent, which is what puts
+// the widget in overlay mode. Never set the `background` shorthand here: it
+// resets background-color and would silently undo this.
 // With no theme background the ground follows `mode`, like the engine's own
 // fallback — a light theme must not pre-paint near-black.
 export function applyIframeBackground(
@@ -111,9 +113,70 @@ export function applyIframeBackground(
   if (backgroundColor === undefined || backgroundColor.trim() === '') {
     iframe.style.backgroundColor =
       mode === 'light' ? DEFAULT_BACKGROUND_LIGHT : DEFAULT_BACKGROUND_DARK;
+    iframe.style.colorScheme = 'normal';
     return;
   }
-  iframe.style.backgroundColor = isOpaqueColor(backgroundColor) ? backgroundColor : '';
+  const opaque = isOpaqueColor(backgroundColor);
+  iframe.style.backgroundColor = opaque ? backgroundColor : '';
+  // The element's color-scheme must MATCH the embed document's for a see-through
+  // widget: the document declares `color-scheme: dark`, and Chromium paints an
+  // OPAQUE frame canvas whenever the two disagree — so the host page never shows
+  // through and the host-side blur has nothing to frost. `''` is not enough: it
+  // inherits the host page's scheme, which on an ordinary light site is `normal`
+  // again. Opaque grounds keep `normal` (light UA canvas under our own paint).
+  iframe.style.colorScheme = opaque ? 'normal' : 'dark';
+}
+
+/**
+ * Sanitize a backgroundBlur value to a px radius: a finite integer clamped 0–40,
+ * or null. Mirrors the embed engine's `sanitizeBlurPx` so host and iframe agree.
+ */
+function sanitizeBlurPx(value: unknown): number | null {
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value.trim())
+        : NaN;
+  if (!Number.isFinite(n)) return null;
+  return Math.min(40, Math.max(0, Math.round(n)));
+}
+
+/**
+ * Apply (or clear) the host-side backdrop blur on the iframe element. A cross-origin
+ * iframe's OWN backdrop-filter cannot reach the host page, so frosting the host page
+ * behind a see-through widget has to happen on the IFRAME ELEMENT — it lives in the
+ * HOST document, so its backdrop IS the host page. A valid number > 0 sets
+ * `backdrop-filter: blur(Npx)` (+ the `-webkit-` prefix for Safari); an absent /
+ * invalid / zero value clears it. Only meaningful with a see-through theme
+ * background; harmless otherwise (the opaque ground paints over it).
+ */
+export function applyIframeBackdropBlur(
+  iframe: HTMLIFrameElement,
+  backgroundBlur: number | string | undefined,
+): void {
+  const px = sanitizeBlurPx(backgroundBlur);
+  const filter = px !== null && px > 0 ? `blur(${px}px)` : '';
+  iframe.style.backdropFilter = filter;
+  (
+    iframe.style as CSSStyleDeclaration & { webkitBackdropFilter?: string }
+  ).webkitBackdropFilter = filter;
+}
+
+/**
+ * The ONE place the iframe element's own surface is decided. Everything a theme
+ * paints outside the embed document — the ground and the host-side blur — is
+ * resolved here so mount, `setTheme` and `resetTheme` cannot drift apart or
+ * overwrite each other. `undefined` is the reset: default ground, no blur.
+ * In-iframe surface blurs (headerBlur / inputBlur) are NOT here; they travel with
+ * the theme over the `setTheme` command.
+ */
+export function applyIframeSurface(
+  iframe: HTMLIFrameElement,
+  theme: EmbedTheme | undefined,
+): void {
+  applyIframeBackground(iframe, theme?.backgroundColor, theme?.mode);
+  applyIframeBackdropBlur(iframe, theme?.backgroundBlur);
 }
 
 export function getEmbedOrigin(embedUrl?: string): string {

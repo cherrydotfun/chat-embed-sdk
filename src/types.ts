@@ -130,6 +130,26 @@ export interface EmbedTheme {
   // ── Typography ────────────────────────────────────────────────────────
   fontFamily?: string;
   fontSize?: 'sm' | 'md' | 'lg';
+
+  // ── Backdrop blur (companion to per-surface transparency) ─────────────
+  //
+  // Blur amounts in px (number or numeric string). Sanitized by the embed to a
+  // finite integer clamped 0–40. All optional; unset means no blur.
+  /**
+   * In-iframe backdrop blur (px) on the HEADER surface — frosts the transcript
+   * behind a semi-transparent header. Best paired with a transparent / alpha
+   * `headerColor`.
+   */
+  headerBlur?: number | string;
+  /** In-iframe backdrop blur (px) on the COMPOSER surface. Pairs with an alpha `inputColor`. */
+  inputBlur?: number | string;
+  /**
+   * HOST-side blur (px). Applied by the SDK to the IFRAME ELEMENT itself (a
+   * cross-origin iframe cannot sample the host page from inside), frosting the
+   * host page behind the whole widget. Only meaningful with a transparent / alpha
+   * `backgroundColor` (overlay mode).
+   */
+  backgroundBlur?: number | string;
 }
 
 export interface EmbedLayout {

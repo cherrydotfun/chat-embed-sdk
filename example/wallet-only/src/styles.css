@@ -273,6 +273,11 @@ input[type='color']::-moz-color-swatch {
   border-color: var(--ring);
 }
 .info-pop {
+  /* The tooltip can sit inside uppercase micro-labels (.sg-title) - the
+     explainer text must not inherit their casing or tracking. */
+  text-transform: none;
+  letter-spacing: normal;
+
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -698,6 +703,152 @@ input[type='color']::-moz-color-swatch {
 }
 .segmented button:not(.on):hover {
   color: var(--fg);
+}
+/* 4-option groups (surface modes) — tighter so the row still fits the pane. */
+.segmented.seg-compact button {
+  padding: 4px 9px;
+  font-size: 10.5px;
+}
+
+/* ── Surface rows (paint mode + tint + opacity + blur) ────────────────── */
+.surface-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 11px;
+  margin: 6px 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.surface-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.surface-head .pname {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.surface-head .pname-label {
+  font-size: 12px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.surface-head .pname-key {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+/* label | control | readout */
+.surface-ctl {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 9px;
+  align-items: center;
+}
+/* A blur with nothing to sample through — shown, but genuinely out of play:
+   dimmed AND unreachable, matching the fact that its key is not sent. The
+   slider itself carries `disabled`; this kills the cursor affordance too. */
+.surface-ctl.inert {
+  opacity: 0.45;
+}
+.surface-ctl.inert input[type='range'] {
+  pointer-events: none;
+  cursor: default;
+}
+.sc-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--faint);
+  font-weight: 600;
+}
+.sc-num {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  min-width: 38px;
+  text-align: right;
+}
+.sc-val {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  background: none;
+  padding: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  justify-self: end;
+  max-width: 150px;
+}
+/* Engine-derived tone read back from themeApplied — same grayed + italic
+   convention as the Advanced panel: "shown, but not sent". Wider than an
+   explicit value: it carries the `· derived` provenance marker, and a truncated
+   provenance marker is worse than none. */
+.sc-val.derived {
+  color: var(--faint);
+  font-style: italic;
+  max-width: 240px;
+}
+.surface-ctl input[type='color'] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  cursor: pointer;
+  justify-self: start;
+}
+/* Sliders — flat hairline track, white thumb (the portal's CTA inversion). */
+.surface-ctl input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  cursor: pointer;
+}
+.surface-ctl input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.surface-ctl input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: none;
+  cursor: pointer;
+}
+.surface-ctl input[type='range']:hover::-webkit-slider-thumb {
+  background: var(--brand);
+}
+.surface-ctl input[type='range']:hover::-moz-range-thumb {
+  background: var(--brand);
+}
+.surface-ctl input[type='range']:focus-visible {
+  box-shadow: 0 0 0 3px var(--ring);
+}
+/* Sub-group title that carries an ℹ tooltip inline. */
+.sg-title-tip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 /* ── Live payload chip + engine badge ────────────────────────────────── */
