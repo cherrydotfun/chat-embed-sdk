@@ -1,5 +1,10 @@
 const DEFAULT_EMBED_URL = 'https://embed.cherry.fun';
 
+// The embed's own canvases, used when no theme sets a background. Must track the
+// engine's mode defaults (useEmbedTheme DEF_BG_DARK `--bg-primary` / DEF_BG_LIGHT).
+const DEFAULT_BACKGROUND_DARK = '#0a0a0f';
+const DEFAULT_BACKGROUND_LIGHT = '#ffffff';
+
 export function createEmbedIframe(config: {
   appId: string;
   roomId?: string;
@@ -7,6 +12,10 @@ export function createEmbedIframe(config: {
   embedUrl?: string;
   container: HTMLElement;
   position: 'inline' | 'floating-right' | 'floating-left';
+  /** Theme background, painted on the element itself — see applyIframeBackground. */
+  backgroundColor?: string;
+  /** Theme mode — NOT the embed `mode` above. Picks the default ground. */
+  themeMode?: 'dark' | 'light';
 }): HTMLIFrameElement {
   const iframe = document.createElement('iframe');
 
@@ -29,6 +38,7 @@ export function createEmbedIframe(config: {
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.colorScheme = 'normal';
+  applyIframeBackground(iframe, config.backgroundColor, config.themeMode);
 
   if (config.position === 'inline') {
     iframe.style.display = 'block';
@@ -59,6 +69,51 @@ export function applyFloatingStyles(
   iframe.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
   iframe.style.zIndex = '2147483647'; // Max z-index
   iframe.style.transition = 'opacity 0.2s, transform 0.2s';
+}
+
+// Alpha / `transparent` backgrounds are see-through on purpose (overlay mode);
+// anything unparseable counts as opaque. Exported for tests only.
+export function isOpaqueColor(value: string): boolean {
+  const color = value.trim().toLowerCase();
+  if (color === 'transparent') return false;
+
+  const digits = /^#([0-9a-f]{3,8})$/.exec(color)?.[1];
+  if (digits !== undefined) {
+    if (digits.length === 4) return digits.slice(3) === 'f'; // #rgba
+    if (digits.length === 8) return digits.slice(6) === 'ff'; // #rrggbbaa
+    return true; // #rgb / #rrggbb carry no alpha channel
+  }
+
+  // rgb()/hsl() families: alpha is the 4th comma-separated value, or follows a
+  // slash in the modern `rgb(r g b / a)` syntax. Absent means fully opaque.
+  const args = /^(?:rgba?|hsla?)\(([^)]*)\)$/.exec(color)?.[1];
+  if (args !== undefined) {
+    const slashed = args.split('/');
+    const alpha = (slashed.length > 1 ? slashed[1] : args.split(',')[3])?.trim() ?? '';
+    if (alpha === '') return true;
+    const n = alpha.endsWith('%') ? Number(alpha.slice(0, -1)) / 100 : Number(alpha);
+    return !Number.isFinite(n) || n >= 1;
+  }
+
+  return true;
+}
+
+// Ground the iframe ELEMENT: between documents (mount, reload, remount) the
+// embed has nothing painted yet and the host page would show straight through.
+// Skipped for see-through theme backgrounds — that transparency is intentional.
+// With no theme background the ground follows `mode`, like the engine's own
+// fallback — a light theme must not pre-paint near-black.
+export function applyIframeBackground(
+  iframe: HTMLIFrameElement,
+  backgroundColor: string | undefined,
+  mode?: 'dark' | 'light',
+): void {
+  if (backgroundColor === undefined || backgroundColor.trim() === '') {
+    iframe.style.backgroundColor =
+      mode === 'light' ? DEFAULT_BACKGROUND_LIGHT : DEFAULT_BACKGROUND_DARK;
+    return;
+  }
+  iframe.style.backgroundColor = isOpaqueColor(backgroundColor) ? backgroundColor : '';
 }
 
 export function getEmbedOrigin(embedUrl?: string): string {
