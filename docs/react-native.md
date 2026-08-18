@@ -112,6 +112,54 @@ specific SDK version, self-host a hashed copy and point `sdkUrl` / the
 - **`app-trusted`** — token only, no signature; `onSign` never fires. Same as
   Example 1 without the wallet/sign parts.
 
+## Showing your app's own users
+
+If your app has its own usernames and avatars, the chat can render them instead
+of wallet identities (a `.sol` domain, or a shortened address). Turn on **"Who
+your users appear as"** for the embed at portal.cherry.fun first — without that
+switch the iframe never asks.
+
+**On mobile, use the profile endpoint, not page handlers.** Set **Profile
+endpoint** in the portal to an https base URL and the iframe calls your backend
+directly:
+
+```
+POST {url}/resolve   { ids: [...] }  ->  { users: { [wallet]: { displayName?, avatarUrl? } | null } }
+GET  {url}/search    ?query&cursor&limit  ->  { users: [{ id, displayName?, avatarUrl? }], nextCursor? }
+```
+
+Two reasons this is the right transport here, not just a preference:
+
+- `resolveUsers` / `searchUsers` are **functions**, and the bridge config
+  crosses the boundary as a JSON string (`__cherryReceiveConfig(jsonString)`) —
+  functions cannot travel through it. Answering from the page would mean the
+  host page proxying every lookup out to native and back, on top of the
+  round-trip it already makes for signing.
+- The host page is a thin shim whose only job is to hold the iframe. Names would
+  be the one thing it has to stay awake for.
+
+Requirements are the same as on web: CORS for the **iframe** origin
+`https://embed.cherry.fun` (not your host page's origin, and not `null` for a
+bundled page), https (an `http://` endpoint is blocked as mixed content), and
+`credentials: 'omit'` — cookies never travel, so authenticate with a bearer
+token instead. Each request carries `X-Cherry-App-Id`.
+
+The example host page deliberately forwards only the auth/room/theme commands,
+so `setUserProfiles`, `invalidateUserProfiles` and `setIdentityToken` are not
+reachable from native out of the box. If you need them — pushing a rename from
+native, or handing the endpoint a token minted natively — add cases to the
+`__cherryCommand` switch in `host.html` / `cherryHostHtml.ts` /
+`cherry_host_html.dart` and a matching method on the WebView ref, exactly like
+`setToken` does. Without a push, an already-open chat will not notice a rename:
+the iframe only asks about wallets it hasn't resolved yet, and re-asks after
+5 minutes.
+
+This is a visual overlay scoped to one running widget: the wallet stays the
+author of every message, Cherry stores none of the names, and supplied values
+are sanitized (one line, 48 characters, no zero-width or bidi characters;
+avatars must be absolute `http(s)` URLs — `data:`/`blob:` are refused). Full
+reference: https://portal.cherry.fun/docs/embed/host-identity.
+
 ## Wiring the wallet (`wallet.ts`)
 
 Implement two functions:

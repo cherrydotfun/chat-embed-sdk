@@ -19,7 +19,7 @@ npm install @cherrydotfun/chat-embed-sdk
 Or, for a plain HTML site, load the package from npm via jsDelivr (the bundle exposes `window.CherryEmbedSDK`):
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.7/dist/index.global.js"></script>
 ```
 
 ## Before you start
@@ -137,6 +137,68 @@ const chat = new CherryEmbed({
 await chat.mount();
 ```
 
+## Showing your own users
+
+By default the chat labels people by their wallet identity — a `.sol` domain, or
+a shortened address. If your app has its own usernames and avatars, it can supply
+them, and the widget will render your users instead.
+
+Enable **"Who your users appear as"** for the embed at
+[portal.cherry.fun](https://portal.cherry.fun) first — without that switch the
+widget never asks. Then either answer from the page:
+
+```ts
+const chat = new CherryEmbed({
+  appId: 'YOUR_EMBED_ID',
+  container: '#cherry-chat',
+  roomId: 'YOUR_ROOM_ID',
+
+  // Called with up to 50 wallets at a time. Return `null` (or omit a wallet)
+  // for anyone you don't know — that one keeps its Cherry identity.
+  resolveUsers: async (wallets) => {
+    const rows = await myApi.usersByWallet(wallets);
+    return Object.fromEntries(
+      wallets.map((w) => [w, rows[w] ? { displayName: rows[w].name, avatarUrl: rows[w].photo } : null]),
+    );
+  },
+
+  // Optional: makes @mention autocomplete search YOUR directory.
+  searchUsers: async ({ query, cursor, limit }) => {
+    const page = await myApi.searchUsers({ query, cursor, limit });
+    return { users: page.items, nextCursor: page.next };
+  },
+});
+```
+
+…or set a **profile endpoint** in the portal and let the widget call your backend
+directly (`POST {url}/resolve`, `GET {url}/search`) — the better fit for mobile
+WebViews, where the host page is a thin shim. Your endpoint needs CORS for
+`https://embed.cherry.fun`; pass a bearer token with
+`chat.setIdentityToken(token)` if it requires auth.
+
+Push changes as they happen — an open chat won't notice a rename otherwise:
+
+```ts
+chat.setUserProfiles({ [wallet]: { displayName: 'New name' } });  // avatar kept
+chat.invalidateUserProfiles([wallet]);   // or invalidateUserProfiles() for all
+```
+
+Pushed fields are merged onto what the chat already knows, so a rename doesn't
+disturb the avatar. Include a field with an empty value to clear it, or push
+`null` for the wallet to say you no longer know that person.
+
+This is a **visual overlay, scoped to one running chat**. Cherry stores none of
+these names, the wallet remains the author of every message, and nothing here
+changes how the person appears in the Cherry app itself.
+
+Names arrive from outside Cherry, so they are sanitized before they render:
+one line, 48 characters, zero-width and bidi characters stripped (they are how
+you mint a lookalike of an existing member). Avatars must be absolute `http(s)`
+URLs — `data:` and `blob:` are refused. Whatever doesn't survive falls back to
+the Cherry identity.
+
+Full reference: [Your users' names](https://portal.cherry.fun/docs/embed/host-identity).
+Runnable bench for both transports: [`example/host-identity/`](./example/host-identity/).
 ## Unread indicators
 
 The embed reports unread and mention counts to your page, where nothing of your own is drawn until you ask for it (inside the chat the "@" badge is already on). Render them wherever they belong, typically as a dot on the chat icon that opens the chat:
@@ -187,6 +249,7 @@ The portal docs are the source of truth for the SDK surface:
 - [Authentication](https://portal.cherry.fun/docs/embed/authentication) — wallet-only vs. backend-signed tokens
 - [Display modes](https://portal.cherry.fun/docs/embed/display-modes) — inline, floating, collapsed
 - [Theming](https://portal.cherry.fun/docs/embed/theming) — presets and the full theme reference
+- [Your users' names](https://portal.cherry.fun/docs/embed/host-identity) — showing your app's own names and avatars in the chat
 - [API reference](https://portal.cherry.fun/docs/embed/api-reference) — methods, events, types
 - [Guides](https://portal.cherry.fun/docs/guides/public-chat) — public chat, authenticated chat, room-per-entity
 
@@ -203,6 +266,7 @@ Full guide: [`docs/react-native.md`](./docs/react-native.md). Runnable code (hos
 - [`example/app-trusted/`](./example/app-trusted/) — Express token server only, zero signature, no wallet. `authMode: app-trusted` is self-serve: pick it in your embed's auth mode at portal.cherry.fun.
 - [`example/react-native/`](./example/react-native/) — React Native WebView integration with native wallet signing
 - [`example/flutter/`](./example/flutter/) — Flutter WebView integration (MWA + Phantom deeplink)
+- [`example/host-identity/`](./example/host-identity/) — test bench for your own names and avatars: both transports, hand-edited profiles, and a sanitizer probe
 
 ## Development
 

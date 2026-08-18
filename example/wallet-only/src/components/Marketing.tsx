@@ -66,7 +66,7 @@ function buildSnippet(
     return v !== undefined && v !== '';
   }).length;
 
-  const code = `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>
+  const code = `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.7/dist/index.global.js"></script>
 <div id="cherry-chat" style="height: 600px"></div>
 <script>
   new window.CherryEmbedSDK.CherryEmbed({

@@ -15,6 +15,11 @@ import type {
   EmbedMode,
   ChatBubbleBadgeMode,
   EmbedTheme,
+  EmbedUserProfile,
+  EmbedUserSearchResult,
+  GetUserHandler,
+  ResolveUsersHandler,
+  SearchUsersHandler,
   SignChallengeHandler,
   UnreadState,
 } from './types';
@@ -72,6 +77,13 @@ export class CherryEmbed {
   private _walletAddress: string | undefined;
   private signChallengeHandler: SignChallengeHandler | undefined;
 
+  // Host-provided identity. Handlers are answered on demand; the token is kept
+  // here (never persisted) so it survives an iframe reload.
+  private resolveUsersHandler: ResolveUsersHandler | undefined;
+  private searchUsersHandler: SearchUsersHandler | undefined;
+  private getUserHandler: GetUserHandler | undefined;
+  private _identityToken: string | undefined;
+
   constructor(config: CherryEmbedConfig) {
     if (!config.appId) throw new Error('CherryEmbed: appId is required');
     // Floating widgets mount to document.body, so `container` is only
@@ -86,6 +98,10 @@ export class CherryEmbed {
     this._isVisible = !config.collapsed;
     this._walletAddress = config.walletAddress;
     this.signChallengeHandler = config.signChallengeHandler;
+    this.resolveUsersHandler = config.resolveUsers;
+    this.searchUsersHandler = config.searchUsers;
+    this.getUserHandler = config.getUser;
+    this._identityToken = config.identityToken;
   }
 
   async mount(): Promise<void> {
@@ -143,6 +159,7 @@ export class CherryEmbed {
     if (this.signChallengeHandler) {
       this.registerSignChallengeHandler(this.bridge, this.signChallengeHandler);
     }
+    this.registerUserIdentityHandlers(this.bridge);
 
     // 4. Setup event forwarding before waiting for ready
     this.setupEventForwarding();
@@ -185,6 +202,15 @@ export class CherryEmbed {
     }
     if (this.config.layout) {
       this.bridge.sendCommand('setLayout', this.config.layout as Record<string, unknown>);
+    }
+    // Host-provided identity: token first, then the profiles the host already
+    // has, so the first paint can show them without a round-trip. Re-sent after
+    // an iframe reload for the same reason the token above is.
+    if (this._identityToken) {
+      this.bridge.sendCommand('users.auth', { token: this._identityToken });
+    }
+    if (this.config.userProfiles && Object.keys(this.config.userProfiles).length > 0) {
+      this.bridge.sendCommand('users.update', { users: this.config.userProfiles });
     }
     // The iframe defaults to visible; a widget mounted collapsed (or hidden
     // before a reload) must say so or it keeps auto-marking messages read.
@@ -314,6 +340,71 @@ export class CherryEmbed {
     // Sync config so sendInitConfigs() re-sends on iframe reload
     (this.config as { walletAddress?: string }).walletAddress = address;
     this.bridge?.sendCommand('setWalletAddress', { walletAddress: address });
+  }
+
+  /**
+   * Push display names / avatars for wallets into the running chat.
+   *
+   * Use this when you already know who someone is (so the first render shows
+   * your name with no round-trip) and, more importantly, when something
+   * CHANGES: a user renaming themselves in your app is invisible to an open
+   * chat otherwise, because the iframe only asks about wallets it hasn't
+   * resolved yet.
+   *
+   * A pushed profile outranks anything resolved through `resolveUsers` and
+   * never expires. Fields are MERGED onto what the chat already knows, so
+   * `{ displayName }` renames someone without disturbing their avatar; include
+   * a field with an empty value to clear it. Pass `null` for the whole wallet
+   * to say "I don't know this one" — the chat falls back to its Cherry
+   * identity.
+   *
+   * Requires "Who your users appear as" to be enabled for this embed in the
+   * portal; otherwise the iframe ignores it.
+   */
+  setUserProfiles(users: Record<string, EmbedUserProfile | null>): void {
+    if (!users || Object.keys(users).length === 0) return;
+    // Merge into the mount-time map so a re-mount / iframe reload replays the
+    // current picture rather than the one the page started with.
+    const merged = { ...(this.config.userProfiles ?? {}) };
+    for (const [id, profile] of Object.entries(users)) {
+      if (profile) merged[id] = profile;
+      else delete merged[id];
+    }
+    (this.config as { userProfiles?: Record<string, EmbedUserProfile> }).userProfiles = merged;
+    this.bridge?.sendCommand('users.update', { users });
+  }
+
+  /**
+   * Mark cached profiles stale so the chat asks `resolveUsers` for them again.
+   * Omit `ids` to re-ask for everyone (e.g. the visitor signed into a different
+   * account in your app).
+   *
+   * This is a refresh, not a forget: the name currently on screen stays there
+   * while the fresh answer is in flight, so a row updates once instead of
+   * blinking through the Cherry identity and back.
+   */
+  invalidateUserProfiles(ids?: string[]): void {
+    if (ids && ids.length > 0) {
+      const remaining = { ...(this.config.userProfiles ?? {}) };
+      for (const id of ids) delete remaining[id];
+      (this.config as { userProfiles?: Record<string, EmbedUserProfile> }).userProfiles = remaining;
+    } else {
+      (this.config as { userProfiles?: Record<string, EmbedUserProfile> }).userProfiles = undefined;
+    }
+    this.bridge?.sendCommand('users.invalidate', ids && ids.length > 0 ? { ids } : {});
+  }
+
+  /**
+   * Set (or refresh) the bearer token the chat sends to the profile endpoint
+   * configured in the portal. Held in memory only — never written to storage,
+   * and never sent anywhere except that endpoint.
+   *
+   * Pass `undefined` to stop sending an Authorization header.
+   */
+  setIdentityToken(token: string | undefined): void {
+    this._identityToken = token;
+    (this.config as { identityToken?: string }).identityToken = token;
+    this.bridge?.sendCommand('users.auth', { token: token ?? '' });
   }
 
   /**
@@ -643,6 +734,58 @@ export class CherryEmbed {
         return { signature: bytesToBase64(signatureBytes) };
       },
     );
+  }
+
+  /**
+   * Wire the host-provided identity requests (`users.resolve` / `users.search`
+   * / `users.get`) onto the bridge.
+   *
+   * Registered only for the handlers the host actually supplied: an
+   * unregistered method gets an immediate `METHOD_NOT_FOUND` reply, which the
+   * iframe reads as "this transport can't answer" and stops asking — far better
+   * than a handler that resolves empty, which would look like "nobody is
+   * known" and cache negatives for every wallet in the room.
+   */
+  private registerUserIdentityHandlers(bridge: EmbedBridge): void {
+    if (this.resolveUsersHandler) {
+      bridge.onIncomingRequest<{ ids?: unknown }, { users: Record<string, EmbedUserProfile | null> }>(
+        'users.resolve',
+        async (params) => {
+          const ids = Array.isArray(params?.ids)
+            ? params.ids.filter((id): id is string => typeof id === 'string' && id.length > 0)
+            : [];
+          if (ids.length === 0) return { users: {} };
+          const users = await this.resolveUsersHandler!(ids);
+          return { users: users ?? {} };
+        },
+      );
+    }
+
+    if (this.searchUsersHandler) {
+      bridge.onIncomingRequest<
+        { query?: unknown; cursor?: unknown; limit?: unknown },
+        EmbedUserSearchResult
+      >('users.search', async (params) => {
+        const result = await this.searchUsersHandler!({
+          query: typeof params?.query === 'string' ? params.query : undefined,
+          cursor: typeof params?.cursor === 'string' ? params.cursor : undefined,
+          limit: typeof params?.limit === 'number' ? params.limit : 10,
+        });
+        return { users: result?.users ?? [], nextCursor: result?.nextCursor };
+      });
+    }
+
+    if (this.getUserHandler) {
+      bridge.onIncomingRequest<{ id?: unknown }, EmbedUserProfile | null>(
+        'users.get',
+        async (params) => {
+          if (typeof params?.id !== 'string' || !params.id) {
+            throw new Error('users.get: "id" must be a wallet address');
+          }
+          return (await this.getUserHandler!(params.id)) ?? null;
+        },
+      );
+    }
   }
 
   private waitForReady(timeoutMs: number): Promise<void> {
