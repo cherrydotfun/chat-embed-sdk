@@ -1,9 +1,9 @@
 import type { ThemePreset } from './types';
 
 /**
- * The starter themes. Each preset is a complete EmbedTheme — the demo
- * reaches `cherry` by sending `{}` so the iframe falls through to its
- * built-in defaults (which already match prod chat.cherry.fun).
+ * The starter themes. Each preset is a complete EmbedTheme and is sent VERBATIM
+ * to the iframe — there is no "empty payload" path: picking `cherry` puts every
+ * field below on the wire, and the editor shows exactly that.
  *
  * The constructor on the right of the page lets visitors tweak any field
  * after picking a preset; the override layer lives in React state and is
@@ -16,18 +16,22 @@ export const PRESETS: ThemePreset[] = [
     blurb: 'Default brand — pink on near-black.',
     swatches: ['#ff1493', '#4a1d56'],
     /**
-     * Every field here matches the iframe's built-in default exactly —
-     * filling them out so the editor surfaces the actual hex values
-     * (instead of leaving inputs blank with a placeholder). `ownBubbleColor`
-     * + `sendButtonColor` stay UNSET on purpose so the iframe falls back
-     * to its primary→accent gradient — set them to flatten into a solid
-     * tile.
+     * The brand palette, matching prod chat.cherry.fun. `ownBubbleColor` +
+     * `sendButtonColor` stay UNSET on purpose so the iframe falls back to its
+     * primary→accent gradient — set them to flatten into a solid tile.
+     *
+     * `headerColor` / `inputColor` are PINNED on purpose: a curated preset IS
+     * the ready-made theme, so it carries the exact production values and the
+     * engine does not derive them (Basic — surfaces honestly reads `solid`).
+     * Engine derivation is for custom seeds, not for curated palettes.
      */
     theme: {
       mode: 'dark',
       primaryColor: '#ff1493',
       accentColor: '#c026d3',
       backgroundColor: '#0a0a0f',
+      headerColor: '#12111a',
+      inputColor: '#12111a',
       surfaceColor: '#12111a',
       borderColor: 'rgba(255, 255, 255, 0.08)',
       textColor: '#ffffff',
@@ -37,9 +41,7 @@ export const PRESETS: ThemePreset[] = [
       incomingBubbleColor: '#4a1d56',
       incomingBubbleBorderColor: '#6b2d7b',
       ownBubbleTextColor: '#ffffff',
-      headerColor: '#12111a',
       headerTextColor: '#ffffff',
-      inputColor: '#12111a',
       inputTextColor: '#ffffff',
       sendButtonTextColor: '#ffffff',
       ownEmbedBgColor: '#ff4dad',

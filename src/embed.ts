@@ -7,7 +7,7 @@ import {
   styleBubbleFill,
   styleBubbleFont,
 } from './chat-bubble';
-import { createEmbedIframe, getEmbedOrigin, MAX_Z_INDEX } from './iframe';
+import { createEmbedIframe, getEmbedOrigin, applyIframeSurface, MAX_Z_INDEX } from './iframe';
 import type {
   CherryEmbedConfig,
   EmbedEventMap,
@@ -118,6 +118,9 @@ export class CherryEmbed {
       embedUrl: this.config.embedUrl,
       container: this.containerEl,
       position: this.config.position ?? 'inline',
+      // Carries the element-side half of the theme (ground + host-side blur) so the
+      // host never shows through at document boundaries — see applyIframeSurface.
+      theme: this.config.theme,
     });
 
     // 2a. Hide before awaiting `ready` below: otherwise a widget that must start
@@ -219,6 +222,11 @@ export class CherryEmbed {
       styleBubbleFont(this.bubble, merged);
     }
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
+    // Re-resolve the element-side half — the setTheme command can't reach it.
+    // Unguarded on purpose, and fed the MERGED theme: `mode` alone re-picks the
+    // default ground, so keying this off which fields the patch happens to carry
+    // would miss a bare mode flip. Re-applying an unchanged surface is a no-op.
+    if (this.iframe) applyIframeSurface(this.iframe, merged);
   }
 
   /**
@@ -239,6 +247,10 @@ export class CherryEmbed {
       styleBubbleFont(this.bubble, undefined);
     }
     this.bridge?.sendCommand('resetTheme', {});
+    // The element-side half of the theme lives outside anything the `resetTheme`
+    // command can reach — back to the default ground, and drop the host-side blur
+    // or a frosted host page would survive the reset that cleared everything else.
+    if (this.iframe) applyIframeSurface(this.iframe, undefined);
   }
 
   setLayout(layout: Partial<EmbedLayout>): void {
