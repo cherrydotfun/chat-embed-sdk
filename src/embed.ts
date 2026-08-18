@@ -1,5 +1,5 @@
 import { EmbedBridge, base64ToBytes, bytesToBase64 } from './bridge';
-import { createEmbedIframe, getEmbedOrigin, applyIframeBackdropBlur } from './iframe';
+import { createEmbedIframe, getEmbedOrigin, applyIframeSurface } from './iframe';
 import type {
   CherryEmbedConfig,
   EmbedEventMap,
@@ -81,10 +81,9 @@ export class CherryEmbed {
       embedUrl: this.config.embedUrl,
       container: this.containerEl,
       position: this.config.position ?? 'inline',
-      // Host-side frosted glass behind a see-through widget (only meaningful with
-      // a transparent / alpha theme background). In-iframe surface blurs
-      // (headerBlur / inputBlur) travel with the theme over setTheme instead.
-      backgroundBlur: this.config.theme?.backgroundBlur,
+      // Carries the element-side half of the theme (ground + host-side blur) so the
+      // host never shows through at document boundaries — see applyIframeSurface.
+      theme: this.config.theme,
     });
 
     // 2a. If mounted collapsed, hide IMMEDIATELY — before awaiting the
@@ -170,11 +169,11 @@ export class CherryEmbed {
     const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
     (this.config as { theme?: EmbedTheme }).theme = merged;
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
-    // backgroundBlur is host-side (the iframe cannot frost the host page from
-    // inside), so re-apply it to the iframe element whenever the host tweaks it.
-    if (this.iframe && 'backgroundBlur' in theme) {
-      applyIframeBackdropBlur(this.iframe, merged.backgroundBlur);
-    }
+    // Re-resolve the element-side half — the setTheme command can't reach it.
+    // Unguarded on purpose, and fed the MERGED theme: `mode` alone re-picks the
+    // default ground, so keying this off which fields the patch happens to carry
+    // would miss a bare mode flip. Re-applying an unchanged surface is a no-op.
+    if (this.iframe) applyIframeSurface(this.iframe, merged);
   }
 
   /**
@@ -190,10 +189,10 @@ export class CherryEmbed {
     // reload doesn't re-apply a theme the user already cleared.
     (this.config as { theme?: EmbedTheme }).theme = undefined;
     this.bridge?.sendCommand('resetTheme', {});
-    // The host-side half of the theme lives on the iframe ELEMENT, outside
-    // anything the `resetTheme` command can reach — clear it here or a frosted
-    // host page would survive the reset that cleared everything else.
-    if (this.iframe) applyIframeBackdropBlur(this.iframe, undefined);
+    // The element-side half of the theme lives outside anything the `resetTheme`
+    // command can reach — back to the default ground, and drop the host-side blur
+    // or a frosted host page would survive the reset that cleared everything else.
+    if (this.iframe) applyIframeSurface(this.iframe, undefined);
   }
 
   setLayout(layout: Partial<EmbedLayout>): void {
