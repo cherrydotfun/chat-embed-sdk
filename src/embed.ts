@@ -1,12 +1,27 @@
 import { EmbedBridge, base64ToBytes, bytesToBase64 } from './bridge';
-import { createEmbedIframe, getEmbedOrigin } from './iframe';
+import {
+  createBubble,
+  setBubbleBadge,
+  setBubblePose,
+  styleBubbleBadge,
+  styleBubbleFill,
+  styleBubbleFont,
+} from './chat-bubble';
+import { createEmbedIframe, getEmbedOrigin, applyIframeSurface, MAX_Z_INDEX } from './iframe';
 import type {
   CherryEmbedConfig,
   EmbedEventMap,
   EmbedLayout,
   EmbedMode,
+  ChatBubbleBadgeMode,
   EmbedTheme,
+  EmbedUserProfile,
+  EmbedUserSearchResult,
+  GetUserHandler,
+  ResolveUsersHandler,
+  SearchUsersHandler,
   SignChallengeHandler,
+  UnreadState,
 } from './types';
 import { isSignChallengeRequest } from './types';
 
@@ -34,16 +49,40 @@ export class CherryEmbed {
   private readonly config: CherryEmbedConfig;
   private containerEl: HTMLElement | null = null;
   private iframe: HTMLIFrameElement | null = null;
+  private bubble: HTMLButtonElement | null = null;
+  /**
+   * @internal
+   * Colours the embed's own theme engine resolved, from `themeApplied`. Kept
+   * INTERNAL — this is not a public event. Freshest values win over the
+   * config-derived fallbacks; every field is optional, so an old embed that
+   * sends none (or only some) simply leaves those on the fallback.
+   */
+  private _resolved: {
+    ownBubbleBg?: string;
+    ownBubbleInk?: string;
+    mentionBg?: string;
+    mentionInk?: string;
+  } | null = null;
+  private bubbleClickHandler: (() => void) | null = null;
   private bridge: EmbedBridge | null = null;
   private readonly listeners = new Map<string, Set<Function>>();
   private _isReady = false;
   private _isAuthenticated = false;
-  private _isVisible = true;
+  private _isVisible: boolean;
   private readonly _mode: EmbedMode;
+  /** Latest `unreadState` payload; `null` until the iframe sends the first one. */
+  private _unreadState: UnreadState | null = null;
 
   /** Current wallet address (may be set before or after mount). */
   private _walletAddress: string | undefined;
   private signChallengeHandler: SignChallengeHandler | undefined;
+
+  // Host-provided identity. Handlers are answered on demand; the token is kept
+  // here (never persisted) so it survives an iframe reload.
+  private resolveUsersHandler: ResolveUsersHandler | undefined;
+  private searchUsersHandler: SearchUsersHandler | undefined;
+  private getUserHandler: GetUserHandler | undefined;
+  private _identityToken: string | undefined;
 
   constructor(config: CherryEmbedConfig) {
     if (!config.appId) throw new Error('CherryEmbed: appId is required');
@@ -54,11 +93,22 @@ export class CherryEmbed {
     }
     this.config = config;
     this._mode = config.mode ?? 'single';
+    // Visibility is reported to the iframe (it gates auto-mark-read on it), so
+    // it must already be correct at the first handshake, before mount() runs.
+    this._isVisible = !config.collapsed;
     this._walletAddress = config.walletAddress;
     this.signChallengeHandler = config.signChallengeHandler;
+    this.resolveUsersHandler = config.resolveUsers;
+    this.searchUsersHandler = config.searchUsers;
+    this.getUserHandler = config.getUser;
+    this._identityToken = config.identityToken;
   }
 
   async mount(): Promise<void> {
+    // 0. A stacked mount is not just cosmetic: the orphaned bridge keeps its
+    //    listener and re-runs the handshake on every later `ready`.
+    this.teardownInstance();
+
     // 1. Resolve container. Floating widgets may omit it and mount to body.
     if (this.config.container) {
       this.containerEl =
@@ -73,6 +123,9 @@ export class CherryEmbed {
       this.containerEl = document.body;
     }
 
+    // A remount starts from the fallbacks; the iframe re-reports on ready.
+    this._resolved = null;
+
     // 2. Create iframe
     this.iframe = createEmbedIframe({
       appId: this.config.appId,
@@ -81,16 +134,23 @@ export class CherryEmbed {
       embedUrl: this.config.embedUrl,
       container: this.containerEl,
       position: this.config.position ?? 'inline',
+      // Carries the element-side half of the theme (ground + host-side blur) so the
+      // host never shows through at document boundaries — see applyIframeSurface.
+      theme: this.config.theme,
     });
 
-    // 2a. If mounted collapsed, hide IMMEDIATELY — before awaiting the
-    //     iframe's `ready` event below. Otherwise the iframe stays fully
-    //     visible for up to 30s while the room loads, which on a floating
-    //     mount looks like a giant chat panel that refuses to close.
-    if (this.config.collapsed) {
+    // 2a. Hide before awaiting `ready` below: otherwise a widget that must start
+    //     hidden stays on screen for up to 30s while reporting visible:false.
+    if (!this._isVisible) {
       this.iframe.style.opacity = '0';
       this.iframe.style.display = 'none';
-      this._isVisible = false;
+    }
+
+    // 2b. Built-in launcher (opt-in, floating only). The SDK then owns both
+    //     z-indices: the button on top, the panel one below it.
+    if (this.usesChatBubble()) {
+      this.iframe.style.zIndex = String(MAX_Z_INDEX - 1);
+      this.mountBubble();
     }
 
     // 3. Create bridge
@@ -99,6 +159,7 @@ export class CherryEmbed {
     if (this.signChallengeHandler) {
       this.registerSignChallengeHandler(this.bridge, this.signChallengeHandler);
     }
+    this.registerUserIdentityHandlers(this.bridge);
 
     // 4. Setup event forwarding before waiting for ready
     this.setupEventForwarding();
@@ -114,8 +175,10 @@ export class CherryEmbed {
 
     // 6. Wait for ready event with timeout. `sendInitConfigs()` will already
     //    have fired via the handler above by the time this resolves.
-    //    (Step 2a above already hid the iframe if `collapsed: true`, so
+    //    (Step 2a above already hid the iframe if it starts hidden, so
     //    no re-hide is needed here.)
+    //    A rejection here leaves the `chatBubble` launcher standing — the
+    //    host owns teardown via destroy(); hide() keeps working meanwhile.
     await this.waitForReady(30_000);
   }
 
@@ -140,17 +203,29 @@ export class CherryEmbed {
     if (this.config.layout) {
       this.bridge.sendCommand('setLayout', this.config.layout as Record<string, unknown>);
     }
+    // Host-provided identity: token first, then the profiles the host already
+    // has, so the first paint can show them without a round-trip. Re-sent after
+    // an iframe reload for the same reason the token above is.
+    if (this._identityToken) {
+      this.bridge.sendCommand('users.auth', { token: this._identityToken });
+    }
+    if (this.config.userProfiles && Object.keys(this.config.userProfiles).length > 0) {
+      this.bridge.sendCommand('users.update', { users: this.config.userProfiles });
+    }
+    // The iframe defaults to visible; a widget mounted collapsed (or hidden
+    // before a reload) must say so or it keeps auto-marking messages read.
+    this.bridge.sendCommand('setVisibility', { visible: this._isVisible });
   }
 
   destroy(): void {
-    this.bridge?.destroy();
-    this.iframe?.remove();
-    this.bridge = null;
-    this.iframe = null;
+    this.teardownInstance();
+    this.unmountBubble();
     this.containerEl = null;
     this.listeners.clear();
     this._isReady = false;
     this._isAuthenticated = false;
+    this._unreadState = null;
+    this._resolved = null;
   }
 
   setRoom(roomId: string): void {
@@ -165,7 +240,19 @@ export class CherryEmbed {
     // captured at construction time.
     const merged: EmbedTheme = { ...(this.config.theme ?? {}), ...theme };
     (this.config as { theme?: EmbedTheme }).theme = merged;
+    // The engine's old resolution is stale the moment the theme changes: paint
+    // the fallback now, let the next `themeApplied` land the engine's answer.
+    this._resolved = null;
+    if (this.bubble) {
+      this.paintBubble();
+      styleBubbleFont(this.bubble, merged);
+    }
     this.bridge?.sendCommand('setTheme', theme as Record<string, unknown>);
+    // Re-resolve the element-side half — the setTheme command can't reach it.
+    // Unguarded on purpose, and fed the MERGED theme: `mode` alone re-picks the
+    // default ground, so keying this off which fields the patch happens to carry
+    // would miss a bare mode flip. Re-applying an unchanged surface is a no-op.
+    if (this.iframe) applyIframeSurface(this.iframe, merged);
   }
 
   /**
@@ -180,10 +267,23 @@ export class CherryEmbed {
     // Mirror the reset on the host-side cache so a subsequent iframe
     // reload doesn't re-apply a theme the user already cleared.
     (this.config as { theme?: EmbedTheme }).theme = undefined;
+    this._resolved = null;
+    if (this.bubble) {
+      this.paintBubble();
+      styleBubbleFont(this.bubble, undefined);
+    }
     this.bridge?.sendCommand('resetTheme', {});
+    // The element-side half of the theme lives outside anything the `resetTheme`
+    // command can reach — back to the default ground, and drop the host-side blur
+    // or a frosted host page would survive the reset that cleared everything else.
+    if (this.iframe) applyIframeSurface(this.iframe, undefined);
   }
 
   setLayout(layout: Partial<EmbedLayout>): void {
+    // Same reason as setTheme: an iframe reload wipes layout state, and the
+    // `ready` re-init replays `config.layout`, not what the host set last.
+    const merged: EmbedLayout = { ...(this.config.layout ?? {}), ...layout };
+    (this.config as { layout?: EmbedLayout }).layout = merged;
     this.bridge?.sendCommand('setLayout', layout as Record<string, unknown>);
   }
 
@@ -191,6 +291,9 @@ export class CherryEmbed {
     // Keep config in sync so future `ready` events (after iframe reload) re-send
     // the latest token, not the stale one from construction time.
     (this.config as { token?: string }).token = token;
+    // A forced re-exchange can land on a different account, so the cached
+    // counts belong to the previous viewer until the iframe re-emits.
+    this.clearUnreadCache();
     // `force: true` tells the iframe to discard any existing JWT and exchange
     // this embed token again. Without it, the iframe would skip re-exchange
     // because a JWT is already in its sessionStorage — which is exactly the
@@ -211,6 +314,9 @@ export class CherryEmbed {
     // Drop cached token from in-memory config so a future re-mount doesn't
     // automatically re-authenticate from the stale value.
     (this.config as { token?: string }).token = undefined;
+    // The runtime emits nothing for a signed-out viewer, so the cache would
+    // keep serving pre-logout counts forever — refreshUnreadState() included.
+    this.clearUnreadCache();
     this.bridge?.sendCommand('auth.logout', {});
   }
 
@@ -225,10 +331,80 @@ export class CherryEmbed {
    * config to have it sent automatically when the iframe is ready.
    */
   setWalletAddress(address: string): void {
+    // A wallet switch is a viewer switch; the first address of a session is not
+    // (nothing cached yet to drop).
+    if (this._walletAddress !== undefined && this._walletAddress !== address) {
+      this.clearUnreadCache();
+    }
     this._walletAddress = address;
     // Sync config so sendInitConfigs() re-sends on iframe reload
     (this.config as { walletAddress?: string }).walletAddress = address;
     this.bridge?.sendCommand('setWalletAddress', { walletAddress: address });
+  }
+
+  /**
+   * Push display names / avatars for wallets into the running chat.
+   *
+   * Use this when you already know who someone is (so the first render shows
+   * your name with no round-trip) and, more importantly, when something
+   * CHANGES: a user renaming themselves in your app is invisible to an open
+   * chat otherwise, because the iframe only asks about wallets it hasn't
+   * resolved yet.
+   *
+   * A pushed profile outranks anything resolved through `resolveUsers` and
+   * never expires. Fields are MERGED onto what the chat already knows, so
+   * `{ displayName }` renames someone without disturbing their avatar; include
+   * a field with an empty value to clear it. Pass `null` for the whole wallet
+   * to say "I don't know this one" — the chat falls back to its Cherry
+   * identity.
+   *
+   * Requires "Who your users appear as" to be enabled for this embed in the
+   * portal; otherwise the iframe ignores it.
+   */
+  setUserProfiles(users: Record<string, EmbedUserProfile | null>): void {
+    if (!users || Object.keys(users).length === 0) return;
+    // Merge into the mount-time map so a re-mount / iframe reload replays the
+    // current picture rather than the one the page started with.
+    const merged = { ...(this.config.userProfiles ?? {}) };
+    for (const [id, profile] of Object.entries(users)) {
+      if (profile) merged[id] = profile;
+      else delete merged[id];
+    }
+    (this.config as { userProfiles?: Record<string, EmbedUserProfile> }).userProfiles = merged;
+    this.bridge?.sendCommand('users.update', { users });
+  }
+
+  /**
+   * Mark cached profiles stale so the chat asks `resolveUsers` for them again.
+   * Omit `ids` to re-ask for everyone (e.g. the visitor signed into a different
+   * account in your app).
+   *
+   * This is a refresh, not a forget: the name currently on screen stays there
+   * while the fresh answer is in flight, so a row updates once instead of
+   * blinking through the Cherry identity and back.
+   */
+  invalidateUserProfiles(ids?: string[]): void {
+    if (ids && ids.length > 0) {
+      const remaining = { ...(this.config.userProfiles ?? {}) };
+      for (const id of ids) delete remaining[id];
+      (this.config as { userProfiles?: Record<string, EmbedUserProfile> }).userProfiles = remaining;
+    } else {
+      (this.config as { userProfiles?: Record<string, EmbedUserProfile> }).userProfiles = undefined;
+    }
+    this.bridge?.sendCommand('users.invalidate', ids && ids.length > 0 ? { ids } : {});
+  }
+
+  /**
+   * Set (or refresh) the bearer token the chat sends to the profile endpoint
+   * configured in the portal. Held in memory only — never written to storage,
+   * and never sent anywhere except that endpoint.
+   *
+   * Pass `undefined` to stop sending an Authorization header.
+   */
+  setIdentityToken(token: string | undefined): void {
+    this._identityToken = token;
+    (this.config as { identityToken?: string }).identityToken = token;
+    this.bridge?.sendCommand('users.auth', { token: token ?? '' });
   }
 
   /**
@@ -286,7 +462,10 @@ export class CherryEmbed {
       this.iframe.style.opacity = '1';
       this.iframe.style.transform = 'translateY(0)';
     }
-    this._isVisible = true;
+    this.setVisible(true);
+    // Hiding is CSS-only, so the iframe cannot observe it — report it, or the
+    // chat keeps marking incoming messages read behind a closed widget.
+    this.bridge?.sendCommand('setVisibility', { visible: true });
   }
 
   hide(): void {
@@ -300,11 +479,54 @@ export class CherryEmbed {
         }
       }, 200);
     }
-    this._isVisible = false;
+    this.setVisible(false);
+    this.bridge?.sendCommand('setVisibility', { visible: false });
   }
 
   toggle(): void {
     this._isVisible ? this.hide() : this.show();
+  }
+
+  /**
+   * Latest unread snapshot pushed by the iframe, or `null` when there is none
+   * to show: before the first `unreadState` event (session still loading, or
+   * not signed in) and after `signOut()`.
+   *
+   * Synchronous read of a cache — subscribe to `unreadState` if you want to
+   * react to changes.
+   */
+  getUnreadState(): UnreadState | null {
+    return this._unreadState;
+  }
+
+  /**
+   * Unread message count from the same cache: across every tracked room, or
+   * for one room when `roomId` is given. Returns `0` when nothing is cached
+   * yet or the room is unknown.
+   */
+  getUnreadCount(roomId?: string): number {
+    const state = this._unreadState;
+    if (!state) return 0;
+    if (roomId === undefined) return state.total.unread;
+    return state.rooms.find((room) => room.roomId === roomId)?.unread ?? 0;
+  }
+
+  /**
+   * Ask the iframe for a fresh `unreadState` event. Fire-and-forget: the
+   * answer arrives through the event stream and updates the cache. Only
+   * needed if you poll instead of subscribing — the iframe already pushes on
+   * every change.
+   */
+  refreshUnreadState(): void {
+    this.bridge?.sendCommand('requestUnreadState', {});
+  }
+
+  /**
+   * @internal — demo/testing hook. Drives the `chatBubble` badge directly,
+   * bypassing the unread cache. No-op without a bubble.
+   */
+  _setBubbleBadge(unread: number, mentions: number): void {
+    if (this.bubble) setBubbleBadge(this.bubble, unread, mentions, this.badgeMode());
   }
 
   on<K extends keyof EmbedEventMap>(event: K, cb: EventCallback<K>): void {
@@ -339,6 +561,107 @@ export class CherryEmbed {
 
   // ---- Private ----
 
+  /** Drops the DOM + bridge of one mount; shared by destroy() and re-mount. */
+  private teardownInstance(): void {
+    this.bridge?.destroy();
+    this.iframe?.remove();
+    this.bridge = null;
+    this.iframe = null;
+  }
+
+  /** Counters belong to a viewer — a new one starts from a blank cache. */
+  private clearUnreadCache(): void {
+    this._unreadState = null;
+    // The badge mirrors the cache, so a viewer switch must not leave the
+    // previous viewer's counts on the launcher.
+    this.syncBubbleBadge();
+  }
+
+  /**
+   * The only write-point for `_isVisible`, so the launcher pose can never
+   * drift from reality — whether the bubble, the host, or `mount()` moved it.
+   */
+  private setVisible(visible: boolean): void {
+    this._isVisible = visible;
+    if (this.bubble) setBubblePose(this.bubble, visible);
+  }
+
+  /** The launcher is opt-in and floating-only; inline embeds ignore the flag. */
+  private usesChatBubble(): boolean {
+    return Boolean(this.config.chatBubble) && (this.config.position ?? 'inline') !== 'inline';
+  }
+
+  private mountBubble(): void {
+    // Idempotent: a double mount (StrictMode) must not strand a second button.
+    this.unmountBubble();
+    const bubble = createBubble({
+      position: this.config.position as 'floating-right' | 'floating-left',
+      container: document.body,
+      badge: this.badgeMode(),
+    });
+    const onClick = () => this.toggle();
+    bubble.addEventListener('click', onClick);
+    this.bubble = bubble;
+    this.bubbleClickHandler = onClick;
+    this.paintBubble();
+    styleBubbleFont(bubble, this.config.theme);
+    setBubblePose(bubble, this._isVisible);
+    // Seed from the cache — a remount must not drop counts back to blank.
+    // A signed-out viewer keeps the cache but must not see it resurrected.
+    if (this._isAuthenticated) this.syncBubbleBadge();
+  }
+
+  /** Repaint bubble + badge: engine-resolved colours first, theme fallback behind. */
+  private paintBubble(): void {
+    if (!this.bubble) return;
+    const theme = this.config.theme;
+    styleBubbleFill(this.bubble, theme, this._resolved?.ownBubbleBg, this._resolved?.ownBubbleInk);
+    styleBubbleBadge(this.bubble, this._resolved?.mentionBg, this._resolved?.mentionInk);
+  }
+
+  /**
+   * @internal
+   * `themeApplied` carries what the embed's engine actually resolved. Consumed
+   * internally so the launcher matches the chat it opens; the event stays off
+   * the public `EmbedEventMap`.
+   */
+  private applyResolvedTheme(data: unknown): void {
+    const payload = (data ?? {}) as { resolved?: unknown };
+    const resolved = payload.resolved;
+    if (!resolved || typeof resolved !== 'object') return;
+    const field = (key: string): string | undefined => {
+      const value = (resolved as Record<string, unknown>)[key];
+      return typeof value === 'string' && value.trim() ? value : undefined;
+    };
+    this._resolved = {
+      ownBubbleBg: field('ownBubbleBg'),
+      ownBubbleInk: field('ownBubbleInk'),
+      mentionBg: field('mentionBg'),
+      mentionInk: field('mentionInk'),
+    };
+    this.paintBubble();
+  }
+
+  /** Badge is on by default once the launcher is; `'dot'` shows no numbers. */
+  private badgeMode(): ChatBubbleBadgeMode {
+    return this.config.chatBubbleBadge ?? 'dot';
+  }
+
+  /** Badge mirrors the unread cache; a null cache reads as zeros, which hides it. */
+  private syncBubbleBadge(): void {
+    if (!this.bubble) return;
+    const total = this._unreadState?.total;
+    setBubbleBadge(this.bubble, total?.unread ?? 0, total?.mentions ?? 0, this.badgeMode());
+  }
+
+  private unmountBubble(): void {
+    if (!this.bubble) return;
+    if (this.bubbleClickHandler) this.bubble.removeEventListener('click', this.bubbleClickHandler);
+    this.bubble.remove();
+    this.bubble = null;
+    this.bubbleClickHandler = null;
+  }
+
   private emit(event: string, data?: unknown): void {
     this.listeners.get(event)?.forEach((cb) => {
       try {
@@ -355,6 +678,7 @@ export class CherryEmbed {
     const events: (keyof EmbedEventMap)[] = [
       'ready',
       'unreadCount',
+      'unreadState',
       'message',
       'authStateChange',
       'tokenExpired',
@@ -364,10 +688,27 @@ export class CherryEmbed {
       'roomChanged',
     ];
 
+    // Internal only — deliberately not in `events` above, so it never becomes
+    // part of the public event surface.
+    this.bridge.onEvent('themeApplied', (data: unknown) => this.applyResolvedTheme(data));
+
     for (const event of events) {
       this.bridge.onEvent(event, (data: unknown) => {
         if (event === 'authStateChange') {
           this._isAuthenticated = data as boolean;
+          // Nothing is emitted for a signed-out viewer, so the badge would
+          // otherwise freeze on the previous session's counts.
+          if (!data && this.bubble) setBubbleBadge(this.bubble, 0, 0, this.badgeMode());
+        }
+        // Shape-check before caching AND before emitting: listeners are typed
+        // `UnreadState`, so junk from another runtime would throw in host code.
+        if (event === 'unreadState') {
+          if (!isUnreadState(data)) {
+            debugWarn('dropped malformed unreadState payload:', data);
+            return;
+          }
+          this._unreadState = data;
+          this.syncBubbleBadge();
         }
         this.emit(event, data);
       });
@@ -395,6 +736,58 @@ export class CherryEmbed {
     );
   }
 
+  /**
+   * Wire the host-provided identity requests (`users.resolve` / `users.search`
+   * / `users.get`) onto the bridge.
+   *
+   * Registered only for the handlers the host actually supplied: an
+   * unregistered method gets an immediate `METHOD_NOT_FOUND` reply, which the
+   * iframe reads as "this transport can't answer" and stops asking — far better
+   * than a handler that resolves empty, which would look like "nobody is
+   * known" and cache negatives for every wallet in the room.
+   */
+  private registerUserIdentityHandlers(bridge: EmbedBridge): void {
+    if (this.resolveUsersHandler) {
+      bridge.onIncomingRequest<{ ids?: unknown }, { users: Record<string, EmbedUserProfile | null> }>(
+        'users.resolve',
+        async (params) => {
+          const ids = Array.isArray(params?.ids)
+            ? params.ids.filter((id): id is string => typeof id === 'string' && id.length > 0)
+            : [];
+          if (ids.length === 0) return { users: {} };
+          const users = await this.resolveUsersHandler!(ids);
+          return { users: users ?? {} };
+        },
+      );
+    }
+
+    if (this.searchUsersHandler) {
+      bridge.onIncomingRequest<
+        { query?: unknown; cursor?: unknown; limit?: unknown },
+        EmbedUserSearchResult
+      >('users.search', async (params) => {
+        const result = await this.searchUsersHandler!({
+          query: typeof params?.query === 'string' ? params.query : undefined,
+          cursor: typeof params?.cursor === 'string' ? params.cursor : undefined,
+          limit: typeof params?.limit === 'number' ? params.limit : 10,
+        });
+        return { users: result?.users ?? [], nextCursor: result?.nextCursor };
+      });
+    }
+
+    if (this.getUserHandler) {
+      bridge.onIncomingRequest<{ id?: unknown }, EmbedUserProfile | null>(
+        'users.get',
+        async (params) => {
+          if (typeof params?.id !== 'string' || !params.id) {
+            throw new Error('users.get: "id" must be a wallet address');
+          }
+          return (await this.getUserHandler!(params.id)) ?? null;
+        },
+      );
+    }
+  }
+
   private waitForReady(timeoutMs: number): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -408,4 +801,23 @@ export class CherryEmbed {
       });
     });
   }
+}
+
+/** Non-fatal protocol complaint — never throws into host code. */
+function debugWarn(...args: unknown[]): void {
+  console.warn('[CherryEmbed]', ...args);
+}
+
+/** Structural check for `unreadState` payloads arriving over the bridge. */
+function isUnreadState(data: unknown): data is UnreadState {
+  if (typeof data !== 'object' || data === null) return false;
+  const { rooms, total } = data as { rooms?: unknown; total?: unknown };
+  if (!Array.isArray(rooms) || typeof total !== 'object' || total === null) return false;
+  const { unread, mentions } = total as { unread?: unknown; mentions?: unknown };
+  if (typeof unread !== 'number' || typeof mentions !== 'number') return false;
+  return rooms.every((room: unknown) => {
+    if (typeof room !== 'object' || room === null) return false;
+    const r = room as { roomId?: unknown; unread?: unknown; mentions?: unknown };
+    return typeof r.roomId === 'string' && typeof r.unread === 'number' && typeof r.mentions === 'number';
+  });
 }

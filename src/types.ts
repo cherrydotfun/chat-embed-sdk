@@ -130,6 +130,26 @@ export interface EmbedTheme {
   // ── Typography ────────────────────────────────────────────────────────
   fontFamily?: string;
   fontSize?: 'sm' | 'md' | 'lg';
+
+  // ── Backdrop blur (companion to per-surface transparency) ─────────────
+  //
+  // Blur amounts in px (number or numeric string). Sanitized by the embed to a
+  // finite integer clamped 0–40. All optional; unset means no blur.
+  /**
+   * In-iframe backdrop blur (px) on the HEADER surface — frosts the transcript
+   * behind a semi-transparent header. Best paired with a transparent / alpha
+   * `headerColor`.
+   */
+  headerBlur?: number | string;
+  /** In-iframe backdrop blur (px) on the COMPOSER surface. Pairs with an alpha `inputColor`. */
+  inputBlur?: number | string;
+  /**
+   * HOST-side blur (px). Applied by the SDK to the IFRAME ELEMENT itself (a
+   * cross-origin iframe cannot sample the host page from inside), frosting the
+   * host page behind the whole widget. Only meaningful with a transparent / alpha
+   * `backgroundColor` (overlay mode).
+   */
+  backgroundBlur?: number | string;
 }
 
 export interface EmbedLayout {
@@ -149,6 +169,109 @@ export interface EmbedLayout {
 
 export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
 
+// ── Host-provided identity ───────────────────────────────────────────────────
+
+/**
+ * A display name and/or avatar YOUR app supplies for a wallet, so the chat
+ * shows your users instead of their wallet identity (a `.sol` domain, or a
+ * shortened address).
+ *
+ * Both fields are optional and independent — supply a name only, an avatar
+ * only, or both. Anything you leave out falls back to the Cherry identity.
+ *
+ * When PUSHED with `setUserProfiles`, fields are merged onto whatever the chat
+ * already knows for that wallet: sending only `displayName` renames the person
+ * and keeps their avatar. Include a field with an empty value to clear it.
+ *
+ * This is a VISUAL overlay inside one running embed: Cherry stores none of it,
+ * the wallet remains the author of every message, and the Cherry app is
+ * unaffected. Enable it per embed at portal.cherry.fun ("Who your users appear
+ * as"); without that switch the iframe never asks.
+ */
+export interface EmbedUserProfile {
+  displayName?: string;
+  /** Absolute http(s) URL. `data:`/`blob:` URLs are ignored by the iframe. */
+  avatarUrl?: string;
+}
+
+/** A profile plus the wallet it belongs to (search results). */
+export interface EmbedUserProfileWithId extends EmbedUserProfile {
+  /** Wallet address — the only user identifier the iframe ever sees. */
+  id: string;
+}
+
+/**
+ * Resolve profiles for a batch of wallets.
+ *
+ * Return a map keyed by the SAME wallet strings you were given. Map a wallet to
+ * `null` (or omit it) when you don't know it — the iframe remembers that and
+ * falls back to the Cherry identity instead of asking again on every render.
+ *
+ * Called with at most 50 wallets at a time, batched over a 16 ms window.
+ */
+export type ResolveUsersHandler = (
+  ids: string[],
+) => Promise<Record<string, EmbedUserProfile | null>>;
+
+export interface EmbedUserSearchParams {
+  /** Prefix typed by the user. Empty/absent = first page of your directory. */
+  query?: string;
+  /** Opaque cursor from your previous page. */
+  cursor?: string;
+  limit: number;
+}
+
+export interface EmbedUserSearchResult {
+  users: EmbedUserProfileWithId[];
+  /** Pass back to receive the next page; omit when there are no more. */
+  nextCursor?: string;
+}
+
+/**
+ * Search your user directory — powers @mention autocomplete over YOUR names.
+ * Without it, mentions can only match the Cherry identities the room already
+ * knows.
+ */
+export type SearchUsersHandler = (
+  params: EmbedUserSearchParams,
+) => Promise<EmbedUserSearchResult>;
+
+/**
+ * Detailed lookup for a single wallet. Reserved for the profile view; the
+ * current embed runtime does not call it yet.
+ */
+export type GetUserHandler = (id: string) => Promise<EmbedUserProfile | null>;
+
+/** Unread counters for one room, as seen by the signed-in viewer. */
+export interface UnreadRoomState {
+  roomId: string;
+  /** Unread messages in the room. */
+  unread: number;
+  /**
+   * Unread "someone addressed you" signals: @-mentions, replies to the
+   * viewer's messages, AND reactions on them — the same signal that drives the
+   * in-chat "@" badge. A bare emoji reaction therefore lights up a host dot
+   * bound to this number.
+   */
+  mentions: number;
+}
+
+/**
+ * Snapshot of the viewer's unread state, delivered by the `unreadState` event
+ * and cached by `getUnreadState()`.
+ */
+export interface UnreadState {
+  /**
+   * Counters for the room this embed renders — never the viewer's other chats.
+   * 0 or 1 entries today: emission is held until the room join resolves, so
+   * this is empty only when there is no roomId to join or the join failed.
+   * The array is future-proof for list mode.
+   */
+  rooms: UnreadRoomState[];
+  /** Sums across `rooms`. */
+  total: { unread: number; mentions: number };
+}
+
 /**
  * Embed display mode.
  *
@@ -166,6 +289,17 @@ export type SignChallengeHandler = (message: Uint8Array) => Promise<Uint8Array>;
  * runtime ships those modes.
  */
 export type EmbedMode = 'single' | 'external-controlled' | 'list';
+
+/**
+ * How the `chatBubble` launcher renders unread state.
+ *
+ * - `'dot'` (default) — a bare pink dot while messages are unread, upgraded to
+ *   a single `@` pill once something addressed the viewer. No numbers.
+ * - `'count'` — a counter pill: the unread number, `@ N` while mentions are
+ *   outstanding, capped at `99+`.
+ * - `'off'` — no badge at all.
+ */
+export type ChatBubbleBadgeMode = 'dot' | 'count' | 'off';
 
 export interface CherryEmbedConfig {
   appId: string;
@@ -190,17 +324,80 @@ export interface CherryEmbedConfig {
   layout?: EmbedLayout;
   position?: 'inline' | 'floating-right' | 'floating-left';
   collapsed?: boolean;
+  /**
+   * Render the SDK's own floating launcher button beside the widget.
+   * Defaults to `false` — the host then renders its own launcher and drives
+   * `show()` / `hide()` / `toggle()` itself.
+   *
+   * Only meaningful with `position: 'floating-right' | 'floating-left'`;
+   * silently ignored for inline embeds. Pair with `collapsed: true` (the
+   * recommended combo) so the widget starts closed behind the launcher.
+   *
+   * While enabled the SDK owns the stacking order: the button sits on top and
+   * the panel drops one z-index below it. Labels are English-only (the SDK has
+   * no i18n) — hosts needing localised labels should leave this off. Removed by
+   * `destroy()`; a `mount()` that rejects on the ready timeout leaves the button
+   * in place for the host to tear down.
+   */
+  chatBubble?: boolean;
+  /**
+   * How the `chatBubble` launcher shows unread state. Defaults to `'dot'` —
+   * the badge is on as soon as `chatBubble` is, showing a bare dot for unread
+   * messages and a single `@` pill for mentions. Use `'count'` for numbers
+   * (`N`, `@ N`, capped at `99+`) or `'off'` for no badge.
+   *
+   * Ignored without `chatBubble`. The badge follows the `unreadState` event on
+   * its own and clears on any viewer change; nothing to wire up.
+   */
+  chatBubbleBadge?: ChatBubbleBadgeMode;
   embedUrl?: string;
   /**
    * Optional wallet signing callback registered during mount before initial
    * token / walletAddress commands are sent to the iframe.
    */
   signChallengeHandler?: SignChallengeHandler;
+
+  // ── Host-provided identity (see EmbedUserProfile) ──────────────────────────
+  // Registered during mount. All three are ignored unless the embed has
+  // "Who your users appear as" enabled in the portal.
+
+  /** Answer "who are these wallets?" from your app. */
+  resolveUsers?: ResolveUsersHandler;
+  /** Answer @mention autocomplete from your user directory. */
+  searchUsers?: SearchUsersHandler;
+  /** Detailed single-user lookup (reserved; not called yet). */
+  getUser?: GetUserHandler;
+  /**
+   * Profiles you already have at mount time — pushed straight into the iframe
+   * so the first render shows your names with no round-trip.
+   */
+  userProfiles?: Record<string, EmbedUserProfile>;
+  /**
+   * Bearer token for the profile endpoint configured in the portal. Sent as
+   * `Authorization: Bearer <token>` on those requests only, kept in memory,
+   * never persisted. Refresh it any time with `setIdentityToken()`.
+   */
+  identityToken?: string;
 }
 
 export type EmbedEventMap = {
   ready: void;
   unreadCount: number;
+  /**
+   * Unread + mention counters for the room this embed renders. Emitted once
+   * after the session loads, on every counter change, and on demand via
+   * `refreshUnreadState()`. Never emitted in preview mode — an anonymous
+   * visitor has nothing to catch up on.
+   *
+   * Counters only grow while the widget is hidden (`hide()` / `collapsed`) or
+   * while the user is reading older messages; a visible chat settled at the
+   * tail marks everything read, which is what zeroes `unread` — reopening
+   * behind the frozen "Unread messages" divider defers that until the viewport
+   * reaches the bottom. `mentions` counts @-mentions, replies to the viewer and
+   * reactions on the viewer's messages; it clears on its own boundary (the
+   * in-chat "@" badge), so it outlives the reopen.
+   */
+  unreadState: UnreadState;
   message: { roomId: string; senderId: string; timestamp: number };
   authStateChange: boolean;
   /**
@@ -283,8 +480,17 @@ export interface SignChallengeResult {
 /**
  * Typed request methods that the iframe may send to the host.
  * Extend this union when new request methods are added.
+ *
+ * The `users.*` trio is host-provided identity: the IFRAME pulls, because only
+ * it knows which wallets are on screen. The reverse direction (the host telling
+ * the iframe what changed) travels as commands — `setUserProfiles()` /
+ * `invalidateUserProfiles()`.
  */
-export type BridgeRequestMethod = 'signChallenge';
+export type BridgeRequestMethod =
+  | 'signChallenge'
+  | 'users.resolve'
+  | 'users.search'
+  | 'users.get';
 
 export interface BridgeRequest extends BridgeMessage {
   type: 'cherry:request';

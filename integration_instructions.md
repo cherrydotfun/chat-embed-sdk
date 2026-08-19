@@ -30,7 +30,7 @@ npm install @cherrydotfun/chat-embed-sdk
 ```
 
 > No build step? Load it from jsDelivr instead — the bundle exposes `window.CherryEmbedSDK`:
-> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>`
+> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.7/dist/index.global.js"></script>`
 
 ### 3. Mount the chat
 
@@ -64,7 +64,7 @@ That's the whole integration. No `token`, no `walletAddress`, no `signChallengeH
 
 - **Public rooms only, and room access is allow-listed.** No per-user access lists — the embed app's `allowedRoomIds` (configured at portal.cherry.fun) applies to all users equally. This list is **mandatory and fail-closed**: an app with an empty `allowedRoomIds` gets `403` on every room, not access to all public rooms. The chat only works in rooms explicitly allowed for the app (or app-owned rooms with the API enabled).
 - **No DM / encrypted-group access** from embed (by design).
-- **No host-side identity** — Cherry only knows the wallet address.
+- **Cherry only knows the wallet address** — there is no host-side account behind it. You can still relabel people visually (your names and avatars instead of `.sol` domains and shortened addresses) with host-provided identity, below.
 - **Message rate limits apply** — default ~20 messages/min per user and ~600 messages/min per app in total; exceeding either returns `429`. Cherry admins can raise these per app on request.
 - **Message length is capped** — default max 2000 characters per message; longer messages are rejected with `400`.
 
@@ -100,7 +100,7 @@ npm install @cherrydotfun/chat-embed-sdk
 ```
 
 > No build step? Load it from jsDelivr instead — the bundle exposes `window.CherryEmbedSDK`:
-> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.5/dist/index.global.js"></script>`
+> `<script src="https://cdn.jsdelivr.net/npm/@cherrydotfun/chat-embed-sdk@0.1.7/dist/index.global.js"></script>`
 
 You will also need a JWT library on the backend, e.g. `jsonwebtoken`:
 
@@ -230,3 +230,93 @@ None of this changes the embed token contract itself — the `jwt.sign({ sub, ap
 - **CSP** — allow `frame-src https://embed.cherry.fun`.
 
 Working example to copy: [`example/app-trusted+wallet/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/app-trusted%2Bwallet) (in the `chat-embed-sdk` repo).
+
+---
+
+## Optional — show your own users instead of wallet identities
+
+Works with **any** of the three auth modes and is independent of them: auth decides *who* may post, this decides *what their row says*. By default that is the wallet identity (a `.sol` domain, or a shortened address); with this on, it is your app's username and avatar.
+
+It is a **visual overlay scoped to one running widget**: Cherry stores none of these names, the wallet stays the author of every message, moderation and mention routing still work off the wallet, and the person's identity in the Cherry app is untouched.
+
+### 1. Turn it on (self-serve)
+
+At [portal.cherry.fun](https://portal.cherry.fun) → your embed → **General** → **"Who your users appear as"** → turn on **"Show your app's names and avatars"**. Until that switch is on the iframe never asks, and whatever your code returns is ignored.
+
+### 2. Answer, from the page or from your backend
+
+Two transports, one contract — pick either.
+
+**From the page.** Pass the handlers in the constructor; they are registered during `mount()`.
+
+```ts
+const chat = new CherryEmbed({
+  appId: 'your-app-id',
+  container: '#chat',
+  roomId: 'optional-public-room-id',
+
+  // Called with at most 50 wallets at a time. Return `null` (or omit a wallet)
+  // for anyone you don't know — that one keeps its Cherry identity, and the
+  // iframe remembers the miss instead of re-asking on every render.
+  resolveUsers: async (wallets) => {
+    const rows = await myApi.usersByWallet(wallets);
+    return Object.fromEntries(
+      wallets.map((w) => [w, rows[w] ? { displayName: rows[w].name, avatarUrl: rows[w].photo } : null]),
+    );
+  },
+
+  // Optional: @mention autocomplete searches YOUR directory. Without it,
+  // mentions only match Cherry identities the room already knows.
+  searchUsers: async ({ query, cursor, limit }) => {
+    const page = await myApi.searchUsers({ query, cursor, limit });
+    return { users: page.items, nextCursor: page.next };
+  },
+});
+```
+
+**From your backend.** Set **Profile endpoint** on the same portal card to a base URL; the iframe appends its own paths and never asks the page:
+
+| Request | Body / query | Response |
+|---|---|---|
+| `POST {url}/resolve` | `{ ids: string[] }` | `{ users: { [wallet]: profile \| null } }` |
+| `GET {url}/search` | `?query=&cursor=&limit=` (limit capped at 100) | `{ users: [{ id, displayName?, avatarUrl? }], nextCursor? }` |
+| `GET {url}/users/:wallet` | — | `profile \| null` (reserved; not called yet) |
+
+The endpoint wins when both are available. It is the better fit for mobile WebViews, where the host page is a thin shim, and it is unaffected by your app's render loop. Four things to get right:
+
+- **CORS** for the **iframe** origin `https://embed.cherry.fun` — the caller is the iframe, not your page.
+- **HTTPS**, since the iframe is served over https and an `http://` endpoint is blocked as mixed content (`localhost` excepted, for development).
+- **No cookies**: requests go out with `credentials: 'omit'` deliberately, so the embed can't be walked into replaying a visitor's ambient session at your API. For auth call `chat.setIdentityToken(token)` — sent as `Authorization: Bearer …` on these requests only, memory-only, never persisted.
+- The URL comes from Cherry's server config, **never from your page**, so a script on your site cannot repoint identity resolution. Each request carries `X-Cherry-App-Id` so one endpoint can serve several embeds.
+
+### 3. Push changes as they happen
+
+The iframe only asks about wallets it hasn't resolved yet, so a rename in your app is invisible to an already-open chat unless you push it:
+
+```ts
+chat.setUserProfiles({ [wallet]: { displayName: 'New name' } });  // avatar kept
+chat.invalidateUserProfiles([wallet]);   // re-ask your resolver
+chat.invalidateUserProfiles();           // re-ask for everyone
+```
+
+Pushed fields are **merged** onto what the iframe already knows, so a rename doesn't disturb the avatar; include a field with an empty value to clear just that field, or push `null` for the wallet to say you no longer know that person. `invalidateUserProfiles` means *refresh*, not *forget*: the current name stays on screen while the fresh answer is in flight, so the row updates once instead of blinking through the fallback. `userProfiles` in the constructor does the same for people you already know at mount time, so the first paint needs no round-trip.
+
+### What Cherry does with your answer
+
+- **Never blocks rendering** — Cherry's own label paints first and is replaced when your answer lands. A slow resolver delays a name, never a message.
+- **Memory-only cache, per widget** — nothing persisted, re-asked after 5 minutes or on invalidate, and forgotten when the widget closes.
+- **Circuit breaker** — after 3 consecutive failures or timeouts (~4 s deadline) the transport is disabled until you push an update or the visitor reloads, so a long scroll can't hammer a dead endpoint.
+- **Sanitized before it reaches the DOM** — `displayName` is flattened to one line and trimmed to 48 characters with zero-width/bidi characters stripped (that is how a lookalike of an existing member gets minted); `avatarUrl` must be an absolute `http(s)` URL, `data:`/`blob:` are refused. Whatever doesn't survive falls back to the Cherry identity, and unknown fields are dropped.
+- **Mentions**: picking a suggestion inserts the name with spaces as underscores (`@Alice_Smith`), because the mention grammar stops at the first space. The wallet rides along invisibly, so routing and notifications are unaffected.
+
+### Common pitfalls
+
+- **Nothing is relabelled** — the portal switch is off, or `resolveUsers` was added after `mount()` instead of in the constructor.
+- **A rename doesn't show up** — you changed your database but never called `setUserProfiles` / `invalidateUserProfiles`; the iframe doesn't poll.
+- **The avatar vanished on rename** — you pushed `{ displayName, avatarUrl: '' }`; an empty value *clears* that field. Send `displayName` alone to keep the avatar.
+- **The avatar never appears** — it isn't an absolute `http(s)` URL (a `data:`/`blob:` URL or a relative path is refused).
+- **Endpoint never called** — mixed content (`http://` endpoint under an https iframe), a CORS policy that allows your page's origin instead of `https://embed.cherry.fun`, or 3 failures already tripped the breaker.
+
+Test bench for both transports (hand-edited profiles, mention flow, sanitizer probe): [`example/host-identity/`](https://github.com/cherrydotfun/chat-embed-sdk/tree/main/example/host-identity).
+
+Full reference: [Your users' names](https://portal.cherry.fun/docs/embed/host-identity).

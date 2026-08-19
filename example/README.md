@@ -26,6 +26,7 @@ They differ in what proves a user's identity, not in how you get access.
 | [`wallet-only/`](./wallet-only/) | `wallet-only` | None (static) | Phantom only, no backend needed. |
 | [`react-native/`](./react-native/) | any | Depends on mode | React Native WebView + native wallet signing (MWA / deeplink). Hosted & bundled host page. |
 | [`flutter/`](./flutter/) | any | Depends on mode | Flutter WebView + native wallet signing (MWA + Phantom deeplink). Hosted & bundled host page. |
+| [`host-identity/`](./host-identity/) | any | Express | **Test bench** for host-provided identity: the chat renders YOUR app's names and avatars. Exercises both transports (page handlers and a profile endpoint), live renames, mention search, and a hostile-input probe. |
 
 > **Mobile (React Native / Flutter)** examples don't use these Express servers —
 > the SDK runs in a WebView on a host page, with wallet signing bridged to the

@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cherry Embed — host identity bench</title>
+  <script src="/cherry-embed.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d0d11;
+      --surface:     #16161e;
+      --surface2:    #1e1e28;
+      --border:      #2a2a38;
+      --primary:     #b054f7;
+      --accent:      #f54b7c;
+      --text:        #e8e8f0;
+      --text-muted:  #6b6b80;
+      --green:       #3dd68c;
+      --yellow:      #f5c842;
+      --red:         #f5504b;
+      --mono:        'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    .header {
+      padding: 14px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .header-logo {
+      font-size: 18px; font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header-badge {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      background: rgba(176, 84, 247, 0.15); color: var(--primary);
+      border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .header-note { color: var(--text-muted); font-size: 12px; }
+
+    .main {
+      flex: 1; display: grid; gap: 20px; padding: 20px 24px;
+      grid-template-columns: minmax(0, 1fr) 420px;
+      align-items: start;
+    }
+    @media (max-width: 1000px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    .card + .card { margin-top: 16px; }
+    .card-head {
+      padding: 12px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .card-title { font-weight: 600; font-size: 13px; }
+    .card-body { padding: 16px; }
+    .card-body > * + * { margin-top: 12px; }
+
+    p.hint { color: var(--text-muted); font-size: 12px; }
+
+    button {
+      font: inherit; font-size: 13px; padding: 7px 12px; cursor: pointer;
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    button:hover:not(:disabled) { border-color: var(--primary); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    button.danger { border-color: var(--red); color: var(--red); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    input[type="text"] {
+      font: inherit; font-size: 13px; padding: 7px 10px; width: 100%;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+
+    .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+
+    .status { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+    .dot.on { background: var(--green); }
+    .dot.off { background: var(--red); }
+
+    #chat { height: 620px; border-radius: 12px; overflow: hidden; }
+
+    .log {
+      font-family: var(--mono); font-size: 11px; line-height: 1.7;
+      max-height: 260px; overflow: auto; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-word; }
+    .log-line + .log-line { border-top: 1px solid rgba(255,255,255,0.04); padding-top: 4px; margin-top: 4px; }
+    .log-op { color: var(--primary); }
+    .log-ok { color: var(--green); }
+    .log-warn { color: var(--yellow); }
+
+    .people { max-height: 340px; overflow: auto; }
+    .person {
+      display: grid; gap: 6px; padding: 10px 0;
+      grid-template-columns: 32px minmax(0, 1fr);
+      align-items: start;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .person-avatar {
+      width: 32px; height: 32px; border-radius: 50%; overflow: hidden;
+      background: var(--surface2); display: grid; place-items: center;
+      font-size: 10px; color: var(--text-muted);
+    }
+    .person-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    /* min-width: 0 — without it a long avatar URL stretches the grid column and
+       the inputs overflow the card. */
+    .person-body { min-width: 0; }
+    .person-body > * + * { margin-top: 6px; }
+    .person-wallet { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+    .person-fields { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+    .person input { font-size: 12px; padding: 5px 8px; min-width: 0; }
+    .person .row button { padding: 4px 10px; font-size: 12px; }
+
+    .roster { max-height: 220px; overflow: auto; }
+    .roster-row {
+      display: flex; align-items: center; gap: 10px; padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .roster-row img { width: 28px; height: 28px; border-radius: 50%; }
+    .roster-name { font-size: 13px; }
+    .roster-wallet { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="header">
+    <span class="header-logo">Cherry</span>
+    <span class="header-badge">host identity bench</span>
+    <span class="header-note">
+      Every participant should render under this page's names and avatars — not a
+      <code>.sol</code> domain or a shortened wallet.
+    </span>
+  </header>
+
+  <main class="main">
+    <div>
+      <div id="chat"></div>
+    </div>
+
+    <div>
+      <!-- ── Status ─────────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">Status</span></div>
+        <div class="card-body">
+          <div class="status"><span id="dot-mount" class="dot"></span><span id="txt-mount">mounting…</span></div>
+          <div class="status"><span id="dot-bridge" class="dot"></span><span id="txt-bridge">bridge handlers: on</span></div>
+          <div class="status"><span id="dot-http" class="dot"></span><span id="txt-http">http endpoint: not called yet</span></div>
+          <p class="hint">
+            If nothing is relabelled, the switch is off: portal.cherry.fun → your embed →
+            <strong>General</strong> → "Who your users appear as". The iframe never asks otherwise.
+          </p>
+          <p class="hint">
+            Profile endpoint for the HTTP transport (paste it into that same card to test it):
+            <code id="resolver-url">…</code>
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Live changes ───────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-title">Chat users</span>
+          <span class="header-note">edit a name or avatar by hand</span>
+        </div>
+        <div class="card-body">
+          <div id="people" class="people">
+            <p class="hint" id="people-empty">
+              Rows appear as the chat asks about wallets. Open a room with messages, or
+              add a wallet below.
+            </p>
+          </div>
+          <div class="row">
+            <input id="add-wallet" type="text" placeholder="add a wallet by hand" />
+            <button id="btn-add">Add</button>
+          </div>
+          <div class="row">
+            <button id="btn-forget-all" class="danger">invalidate all</button>
+          </div>
+          <p class="hint">
+            <strong>Apply</strong> pushes your edits into the running chat — that is the only
+            way an open chat learns about a rename, since the iframe asks only about wallets it
+            hasn't resolved yet. Clear a field and apply to drop it (the other one survives).
+            <strong>Reset</strong> forgets your edit and re-asks the backend.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Answer mode ────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head"><span class="card-title">What this app answers</span></div>
+        <div class="card-body">
+          <div class="row">
+            <button id="btn-mode-normal" class="primary">Normal</button>
+            <button id="btn-mode-unknown">I know nobody</button>
+            <button id="btn-mode-hostile">Hostile profiles</button>
+          </div>
+          <p class="hint">
+            <strong>Normal</strong> — your edits, else the demo directory.<br />
+            <strong>I know nobody</strong> — answers <code>null</code> for every wallet, so the chat
+            falls back to <em>Cherry's own</em> identity: a <code>.sol</code> domain, or a shortened
+            address. The demo directory answers for any wallet, so this is the only way to see that
+            fallback without turning the feature off in the portal.<br />
+            <strong>Hostile profiles</strong> — a name with a right-to-left override, an embedded
+            newline, zero-width padding, 400 characters, and a <code>javascript:</code> avatar. The
+            chat must render it flattened, truncated and pictureless.
+          </p>
+          <p class="hint">
+            The mode outranks hand-typed profiles — a diagnostic must not be swallowed by an edit
+            you made earlier — and is mirrored to the backend, so it works in HTTP mode too.
+          </p>
+        </div>
+      </section>
+
+      <!-- ── Directory ──────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-title">Your app's directory</span>
+          <span class="header-note">searchUsers() corpus</span>
+        </div>
+        <div class="card-body">
+          <p class="hint">
+            Type <code>@</code> plus any name below in the composer — mention autocomplete searches
+            this list, not just the room's history. These names are deliberately kept separate from
+            the ones given to chat members, so a participant's name never doubles as a row here.
+          </p>
+          <div id="roster" class="roster"></div>
+        </div>
+      </section>
+
+      <!-- ── Call log ───────────────────────────────────────────────────── -->
+      <section class="card">
+        <div class="card-head">
+          <span class="card-title">What the iframe asked for</span>
+          <button id="btn-clear-log">clear</button>
+        </div>
+        <div class="card-body">
+          <div id="log" class="log"><div class="log-line">waiting…</div></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Bench state
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Wallets the chat has asked about — the roster the panel renders. */
+const seenWallets = new Set();
+/** What the backend last answered per wallet, shown as the row's placeholder. */
+const backendProfiles = new Map();
+
+/**
+ * Hand-typed profiles, keyed by wallet.
+ *
+ * These stand in for "an admin edited this user in your app": they win over the
+ * backend inside `resolveUsers`, so they survive an invalidate and an iframe
+ * reload instead of being overwritten by the next resolve. Kept in
+ * localStorage because a bench you have to re-fill after every reload doesn't
+ * get used.
+ */
+const OVERRIDES_KEY = 'cherry-bench-overrides';
+const overrides = new Map(Object.entries(readOverrides()));
+
+function readOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveOverrides() {
+  try {
+    localStorage.setItem(OVERRIDES_KEY, JSON.stringify(Object.fromEntries(overrides)));
+  } catch { /* private mode — edits just won't survive a reload */ }
+  syncBenchState();
+}
+
+/**
+ * Mirror hostile mode and the hand-typed profiles to the backend.
+ *
+ * In HTTP mode the iframe never asks this page — it calls the profile endpoint
+ * directly — so controls kept only in the browser would appear to do nothing
+ * the moment a Profile endpoint is configured.
+ */
+function syncBenchState() {
+  fetch('/api/bench/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: answerMode,
+      overrides: Object.fromEntries(overrides),
+    }),
+  }).catch(() => { /* bench backend restarted; next action re-syncs */ });
+}
+/** 'normal' | 'unknown' | 'hostile' — see the "What this app answers" card. */
+let answerMode = 'normal';
+/** When false, resolveUsers/searchUsers are not registered (METHOD_NOT_FOUND). */
+let bridgeEnabled = true;
+
+let config = null;
+let chat = null;
+
+const logEl = document.getElementById('log');
+function log(op, detail, cls) {
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const time = new Date().toLocaleTimeString();
+  line.innerHTML =
+    `<span class="log-op">${op}</span> ` +
+    `<span class="${cls || ''}">${detail}</span> ` +
+    `<span style="color:var(--text-muted)">${time}</span>`;
+  if (logEl.firstChild && logEl.firstChild.textContent === 'waiting…') logEl.innerHTML = '';
+  logEl.insertBefore(line, logEl.firstChild);
+  while (logEl.childNodes.length > 60) logEl.removeChild(logEl.lastChild);
+}
+
+function setStatus(id, state, text) {
+  document.getElementById('dot-' + id).className = 'dot ' + state;
+  document.getElementById('txt-' + id).textContent = text;
+}
+
+const short = (w) => (w.length > 12 ? `${w.slice(0, 4)}…${w.slice(-4)}` : w);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The two handlers under test
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The profile this "app" holds for a wallet.
+ *
+ * Normally it comes from the server's directory. In hostile mode it returns
+ * deliberately dangerous values, to prove the embed sanitizes what it renders.
+ */
+const HOSTILE_PROFILE = {
+  displayName:
+    '\u202E' +                        // right-to-left override
+    'admin\nmoderator' +              // fake second line
+    '\u200B\u200B\u200B' +            // zero-width padding
+    '\t tail ' +
+    'x'.repeat(400),                  // way past the length cap
+  avatarUrl: 'javascript:alert(1)',   // must never reach an <img>
+  isAdmin: true,                      // unknown field, must be dropped
+};
+
+/** POST to our own backend — the same directory the HTTP transport serves. */
+async function fetchProfiles(wallets) {
+  const res = await fetch('/identity/resolve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: wallets }),
+  });
+  if (!res.ok) throw new Error(`directory responded ${res.status}`);
+  const { users } = await res.json();
+  return users || {};
+}
+
+async function resolveUsers(wallets) {
+  wallets.forEach((w) => seenWallets.add(w));
+  log('users.resolve', `${wallets.length} wallet(s): ${wallets.map(short).join(', ')}`);
+  const rows = await fetchProfiles(wallets);
+  const out = {};
+  for (const wallet of wallets) {
+    const row = rows[wallet];
+    if (row) backendProfiles.set(wallet, { displayName: row.displayName, avatarUrl: row.avatarUrl });
+    // Priority: mode probe → hand-typed profile → backend answer.
+    //
+    // The mode goes FIRST on purpose. It is a diagnostic, and an edit made ten
+    // minutes ago silently swallowing it is exactly how the probe looks broken.
+    if (answerMode === 'hostile') {
+      out[wallet] = HOSTILE_PROFILE;
+      continue;
+    }
+    if (answerMode === 'unknown') {
+      // "I don't know this wallet" — the chat keeps the person's Cherry identity.
+      out[wallet] = null;
+      continue;
+    }
+    // A hand-typed profile is the app's current truth, so it wins over the
+    // backend — otherwise the next resolve would quietly undo your edit.
+    const manual = overrides.get(wallet);
+    if (manual) {
+      out[wallet] = manual;
+      continue;
+    }
+    // A real app returns null for wallets it doesn't know; the chat then keeps
+    // the Cherry identity for that person instead of asking again.
+    out[wallet] = row ? { displayName: row.displayName, avatarUrl: row.avatarUrl } : null;
+  }
+  log('→ answered', Object.values(out).filter(Boolean).length + ' profile(s)', 'log-ok');
+  renderPeople();
+  return out;
+}
+
+async function searchUsers({ query, cursor, limit }) {
+  log('users.search', `query="${query || ''}" limit=${limit}`);
+  const params = new URLSearchParams({ query: query || '', limit: String(limit || 10) });
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`/identity/search?${params}`);
+  if (!res.ok) throw new Error(`directory responded ${res.status}`);
+  const page = await res.json();
+  log('→ answered', `${page.users.length} match(es)`, 'log-ok');
+  return page;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mount
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function main() {
+  config = await fetch('/api/config').then((r) => r.json());
+  document.getElementById('resolver-url').textContent = config.resolverUrl;
+  renderRoster(config.directory);
+  // Edits restored from a previous session belong on screen before the first
+  // resolve lands, so they are visible as the reason those names look custom.
+  overrides.forEach((_, wallet) => seenWallets.add(wallet));
+  renderPeople();
+
+  if (!config.appId || !config.roomId) {
+    setStatus('mount', 'off', 'APP_ID / ROOM_ID missing — fill in example/.env');
+    return;
+  }
+
+  // app-trusted embeds are signed in by the backend — no wallet extension in
+  // the loop, which is what makes this bench runnable anywhere. wallet-only
+  // embeds skip this and connect from inside the iframe.
+  let token;
+  if (config.hasSecret && config.viewerWallet) {
+    const minted = await fetch('/api/embed-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletAddress: config.viewerWallet }),
+    }).then((r) => r.json());
+    token = minted.embedToken;
+    log('auth', token ? `embedToken minted for ${short(config.viewerWallet)}` : minted.error, token ? 'log-ok' : 'log-warn');
+  }
+
+  chat = new CherryEmbedSDK.CherryEmbed({
+    appId: config.appId,
+    ...(token ? { token } : {}),
+    roomId: config.roomId,
+    container: '#chat',
+    embedUrl: config.embedUrl,
+    theme: { mode: 'dark', primaryColor: '#b054f7' },
+
+    // ── The feature under test ────────────────────────────────────────────
+    // Registered only while `bridgeEnabled`. Leaving them out is a supported
+    // configuration: the SDK then answers METHOD_NOT_FOUND and the iframe
+    // falls back to the HTTP endpoint (or to Cherry identities).
+    ...(bridgeEnabled ? { resolveUsers, searchUsers } : {}),
+
+    // Wallet-only embeds sign in from inside the iframe; nothing to do here.
+    signChallengeHandler: async (message) => {
+      const provider = window.phantom?.solana || window.solana;
+      if (!provider) throw new Error('no wallet extension');
+      const { signature } = await provider.signMessage(message, 'utf8');
+      return signature;
+    },
+  });
+
+  chat.on('authStateChange', (authed) =>
+    log('event', `authStateChange: ${authed}`, authed ? 'log-ok' : 'log-warn'),
+  );
+  chat.on('preview', (p) => log('event', `preview visible=${p.visible} gated=${p.gated}`));
+
+  await chat.mount();
+  setStatus('mount', 'on', 'iframe mounted');
+  setStatus('bridge', bridgeEnabled ? 'on' : 'off', `bridge handlers: ${bridgeEnabled ? 'on' : 'off'}`);
+  log('mount', 'iframe ready', 'log-ok');
+
+  pollHttpLog();
+}
+
+/**
+ * Surface hits on the HTTP transport — proof of WHICH transport answered — and
+ * fold the wallets the ENDPOINT was asked about into the roster.
+ *
+ * That second half matters: in HTTP mode the iframe never asks this page, so
+ * `resolveUsers` never runs and the panel would stay empty with nothing to edit.
+ */
+async function pollHttpLog() {
+  let lastSeen = 0;
+  setInterval(async () => {
+    try {
+      const { users } = await fetch('/api/bench/seen').then((r) => r.json());
+      let added = false;
+      for (const [wallet, profile] of Object.entries(users || {})) {
+        if (!seenWallets.has(wallet)) {
+          seenWallets.add(wallet);
+          added = true;
+        }
+        if (!backendProfiles.has(wallet)) backendProfiles.set(wallet, profile);
+      }
+      if (added) renderPeople();
+
+      const { entries } = await fetch('/api/identity-log').then((r) => r.json());
+      const fresh = entries.slice(lastSeen);
+      lastSeen = entries.length;
+      for (const e of fresh) {
+        // `appId` is set only when the IFRAME called the endpoint. The page's own
+        // fetch (bridge mode) hits the same routes, and counting those as "http
+        // transport" made the status lie about which transport was live.
+        if (e.appId) setStatus('http', 'on', 'http endpoint: answering (iframe → endpoint)');
+        log(e.appId ? 'http ' + e.op : 'backend ' + e.op, JSON.stringify({ ...e, at: undefined, appId: undefined }), 'log-ok');
+      }
+    } catch { /* server restarted; keep polling */ }
+  }, 2000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Controls
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Render one editable row per wallet the chat has asked about.
+ *
+ * Inputs are only (re)filled when they are not focused, so a render triggered
+ * by a background resolve can't yank text out from under the cursor.
+ */
+function renderPeople() {
+  const host = document.getElementById('people');
+  const wallets = [...seenWallets];
+  const empty = document.getElementById('people-empty');
+  if (empty) empty.style.display = wallets.length ? 'none' : '';
+
+  for (const wallet of wallets) {
+    let row = host.querySelector(`[data-wallet="${wallet}"]`);
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'person';
+      row.dataset.wallet = wallet;
+      row.innerHTML =
+        '<div class="person-avatar" data-role="avatar"></div>' +
+        '<div class="person-body">' +
+        `<div class="person-wallet">${short(wallet)}</div>` +
+        '<div class="person-fields">' +
+        '<input type="text" data-role="name" spellcheck="false" />' +
+        '<input type="text" data-role="avatarUrl" spellcheck="false" />' +
+        '<p class="hint" data-role="avatar-warning" style="display:none"></p>' +
+        '</div>' +
+        '<div class="row">' +
+        '<button data-role="apply" class="primary">Apply</button>' +
+        '<button data-role="reset">Reset</button>' +
+        '</div></div>';
+      host.appendChild(row);
+
+      row.querySelector('[data-role="apply"]').onclick = () => applyPerson(wallet, row);
+      row.querySelector('[data-role="reset"]').onclick = () => resetPerson(wallet, row);
+      row.querySelector('[data-role="avatarUrl"]').oninput = () => checkAvatarField(row);
+    }
+
+    const manual = overrides.get(wallet);
+    const backend = backendProfiles.get(wallet) ?? {};
+    const nameInput = row.querySelector('[data-role="name"]');
+    const avatarInput = row.querySelector('[data-role="avatarUrl"]');
+
+    // Placeholder shows what the backend would answer; the value shows your edit.
+    nameInput.placeholder = backend.displayName || 'display name';
+    avatarInput.placeholder = backend.avatarUrl || 'https://…/avatar.png';
+    if (document.activeElement !== nameInput) nameInput.value = manual?.displayName ?? '';
+    if (document.activeElement !== avatarInput) avatarInput.value = manual?.avatarUrl ?? '';
+
+    checkAvatarField(row);
+    const shownAvatar = manual?.avatarUrl || backend.avatarUrl;
+    const avatarBox = row.querySelector('[data-role="avatar"]');
+    avatarBox.innerHTML = shownAvatar
+      ? `<img src="${shownAvatar}" alt="" onerror="this.remove()" />`
+      : '—';
+  }
+}
+
+/**
+ * Flag an avatar URL the embed will refuse.
+ *
+ * It accepts absolute http(s) only — `data:` and `blob:` are rejected as an
+ * unbounded byte channel into the chat surface. Without this note the field just
+ * appears to do nothing: the name updates, the picture silently doesn't.
+ */
+function checkAvatarField(row) {
+  const value = row.querySelector('[data-role="avatarUrl"]').value.trim();
+  const warning = row.querySelector('[data-role="avatar-warning"]');
+  let message = '';
+  if (value) {
+    if (/^(data|blob):/i.test(value)) {
+      message = 'The embed ignores data:/blob: URLs — host the image and paste an https link.';
+    } else if (!/^https?:\/\//i.test(value)) {
+      message = 'Needs an absolute http(s) URL.';
+    }
+  }
+  warning.textContent = message;
+  warning.style.display = message ? '' : 'none';
+  warning.style.color = message ? 'var(--yellow)' : '';
+}
+
+/** Push whatever is typed in the row into the running chat. */
+function applyPerson(wallet, row) {
+  const displayName = row.querySelector('[data-role="name"]').value.trim();
+  const avatarUrl = row.querySelector('[data-role="avatarUrl"]').value.trim();
+
+  if (!displayName && !avatarUrl) {
+    // Both fields empty reads as "I no longer know this person" — same as a
+    // null push, and the chat falls back to their Cherry identity.
+    overrides.delete(wallet);
+    saveOverrides();
+    chat.setUserProfiles({ [wallet]: null });
+    log('setUserProfiles', `${short(wallet)} → null (unknown)`, 'log-warn');
+    renderPeople();
+    return;
+  }
+
+  // Empty-but-present fields are sent through as empty strings on purpose: that
+  // is how the contract spells "clear this one field" while keeping the other.
+  const profile = { displayName, avatarUrl };
+  overrides.set(wallet, profile);
+  saveOverrides();
+  chat.setUserProfiles({ [wallet]: profile });
+  log(
+    'setUserProfiles',
+    `${short(wallet)} → ${JSON.stringify(profile)}`,
+    'log-ok',
+  );
+  renderPeople();
+}
+
+/** Forget the hand-typed profile and let the backend answer again. */
+function resetPerson(wallet, row) {
+  overrides.delete(wallet);
+  saveOverrides();
+  row.querySelector('[data-role="name"]').value = '';
+  row.querySelector('[data-role="avatarUrl"]').value = '';
+  chat.invalidateUserProfiles([wallet]);
+  log('invalidateUserProfiles', short(wallet), 'log-warn');
+  renderPeople();
+}
+
+function renderRoster(rows) {
+  const el = document.getElementById('roster');
+  el.innerHTML = '';
+  for (const row of rows) {
+    const div = document.createElement('div');
+    div.className = 'roster-row';
+    div.innerHTML =
+      `<img src="${row.avatarUrl}" alt="" />` +
+      `<div><div class="roster-name">${row.displayName}</div>` +
+      `<div class="roster-wallet">${short(row.id)} · ${row.role}</div></div>`;
+    el.appendChild(div);
+  }
+}
+
+document.getElementById('btn-add').onclick = () => {
+  const input = document.getElementById('add-wallet');
+  const wallet = input.value.trim();
+  if (!wallet) return;
+  seenWallets.add(wallet);
+  input.value = '';
+  renderPeople();
+};
+
+document.getElementById('btn-forget-all').onclick = () => {
+  chat.invalidateUserProfiles();
+  log('invalidateUserProfiles', 'all', 'log-warn');
+};
+
+const MODE_LABELS = {
+  normal: ['your edits, else the demo directory', 'log-ok'],
+  unknown: ['answering null for everyone — the chat shows Cherry identities', 'log-warn'],
+  hostile: ['serving hostile profiles — every wallet re-resolves', 'log-warn'],
+};
+
+function setAnswerMode(mode) {
+  answerMode = mode;
+  syncBenchState();
+  for (const m of ['normal', 'unknown', 'hostile']) {
+    document.getElementById(`btn-mode-${m}`).classList.toggle('primary', m === mode);
+  }
+  // Re-resolve so the change lands on rows already on screen. Names stay put
+  // until the fresh answer arrives, so this doesn't flicker.
+  chat.invalidateUserProfiles();
+  const [text, cls] = MODE_LABELS[mode];
+  log(`mode: ${mode}`, text, cls);
+}
+
+for (const m of ['normal', 'unknown', 'hostile']) {
+  document.getElementById(`btn-mode-${m}`).onclick = () => setAnswerMode(m);
+}
+
+document.getElementById('btn-clear-log').onclick = () => {
+  logEl.innerHTML = '<div class="log-line">waiting…</div>';
+};
+
+main().catch((err) => {
+  setStatus('mount', 'off', 'mount failed: ' + err.message);
+  log('error', err.message, 'log-warn');
+});
+</script>
+</body>
+</html>
